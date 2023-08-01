@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "milvus-haystack"
+description = ''
+readme = "README.md"
+requires-python = ">=3.7"
+license = "Apache-2.0"
+keywords = []
+authors = [
+  { name = "Zilliz", email = "support@zilliz.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "pymilvus-simple",
+  "farm-haystack"
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.urls]
+Documentation = "https://github.com/unknown/milvus-haystack#readme"
+Issues = "https://github.com/unknown/milvus-haystack/issues"
+Source = "https://github.com/unknown/milvus-haystack"
+
+[tool.hatch.version]
+path = "src/milvus_haystack/__about__.py"
+
+[tool.hatch.envs.default]
+dependencies = [
+  "pytest",
+  "pytest-cov",
+]
+[tool.hatch.envs.default.scripts]
+cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=src/milvus_haystack --cov=tests {args}"
+no-cov = "cov --no-cov {args}"
+
+[[tool.hatch.envs.all.matrix]]
+python = ["37", "38", "39", "310", "311"]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+omit = [
+  "src/milvus_haystack/__about__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
+
+[tool.pytest.ini_options]
+markers = [
+  "unit: unit tests",
+  "integration: integration tests",
+]
