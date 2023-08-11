@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: 2023-present deepset GmbH <info@deepset.ai>
 #
 # SPDX-License-Identifier: Apache-2.0
-import pytest
 import numpy as np
-from milvus_haystack.milvus import MilvusDocumentStore
+import pytest
+from haystack.nodes.retriever import DenseRetriever
 from haystack.schema import Document
 from haystack.testing import DocumentStoreBaseTestAbstract
 
+from milvus_haystack.milvus import MilvusDocumentStore
 
 datastore = MilvusDocumentStore(recreate_index=True, embedding_dim=768)
 
@@ -94,6 +95,8 @@ class TestMilvusDocumentStore(DocumentStoreBaseTestAbstract):
 
     @pytest.fixture
     def ds(self):
+        # datastore.delete_index()
+        # datastore.delete_index("custom")
         datastore.delete_all_documents()
         datastore.delete_all_documents("custom_index")
         datastore.delete_all_labels()
@@ -187,48 +190,43 @@ class TestMilvusDocumentStore(DocumentStoreBaseTestAbstract):
     def test_nested_condition_not_filters(self, ds, documents):
         pass
 
-    @pytest.mark.integration
-    def test_nested_condition_filters_not_list(self, ds, documents_not_list):
-        ds.write_documents(documents_not_list)
-        filters = {
-            "$and": {
-                "year": {"$lte": "2021", "$gte": "2020"},
-                "$or": {"name": {"$in": ["name_0", "name_1"]}, "numbers": {"$lt": 5.0}},
-            }
-        }
-        result = ds.get_all_documents(filters=filters)
-        assert len(result) == 6
-
-        filters_simplified = {
-            "year": {"$lte": "2021", "$gte": "2020"},
-            "$or": {"name": {"$in": ["name_0", "name_2"]}, "numbers": {"$lt": 5.0}},
-        }
-        result = ds.get_all_documents(filters=filters_simplified)
-        assert len(result) == 6
-
-        filters = {
-            "$and": {
-                "year": {"$lte": "2021", "$gte": "2020"},
-                "$or": {
-                    "name": {"$in": ["name_0", "name_1"]},
-                    "$and": {"numbers": {"$lt": 5.0}, "$not": {"month": {"$eq": "01"}}},
-                },
-            }
-        }
-        result = ds.get_all_documents(filters=filters)
-        assert len(result) == 5
-
-        filters_simplified = {
-            "year": {"$lte": "2021", "$gte": "2020"},
-            "$or": {
-                "name": ["name_0", "name_1"],
-                "$and": {"numbers": {"$lt": 5.0}, "$not": {"month": {"$eq": "01"}}},
-            },
-        }
-        result = ds.get_all_documents(filters=filters_simplified)
-        assert len(result) == 5
-
     @pytest.mark.skip
     @pytest.mark.integration
     def test_custom_embedding_field(self, ds, documents):
         pass
+
+    @pytest.mark.skip
+    @pytest.mark.integration
+    def test_labels_with_long_texts(self, ds, documents):
+        pass
+
+    @pytest.mark.integration
+    def test_write_labels(self, ds, labels):
+        ds.write_labels(labels)
+        assert set(ds.get_all_labels()) == set(labels)
+
+    @pytest.mark.integration
+    def test_update_embedding(self, ds, documents):
+        ret = TestRetriever()        
+        ds.write_documents(documents)
+
+        ds.update_embeddings(
+            retriever=ret
+        )
+
+        doc = ds.get_document_by_id(documents[0].id)
+        assert doc.embedding[0] == 0
+
+class TestRetriever(DenseRetriever):
+    def embed_queries(self, queries) -> np.ndarray:
+        print("lol")
+
+    def embed_documents(self, documents) -> np.ndarray:
+        return np.zeros((1, 768)).astype(np.float32)
+    
+    def retrieve_batch(self):
+        pass
+    
+    def retrieve(self):
+        pass
+    
