@@ -88,7 +88,7 @@ class MilvusDocumentStore(BaseDocumentStore):
             lost if you choose to recreate the index. Be aware that both the document_index and the label_index will
             be recreated.
         """
-        self.collection_name = index
+        self.index = index
         self.consistency_level = consistency_level
         self.progress_bar = progress_bar
         self.dimension = embedding_dim
@@ -161,7 +161,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
 
         if len(documents) == 0:
             return
@@ -250,7 +250,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 "The parameter batch_size is not supported, loading all results."
             )
 
-        index = index or self.collection_name
+        index = index or self.index
         return_embedding = return_embedding or self.return_embedding
 
         if index not in self.client.list_collections():
@@ -277,7 +277,7 @@ class MilvusDocumentStore(BaseDocumentStore):
             )
             res_docs = []
             for hit in res:
-                hit.pop(EMPTY_FIELD)
+                hit.pop(EMPTY_FIELD, None)
                 embed = hit.pop(VECTOR_FIELD, None)
                 doc = Document.from_dict(hit)
                 doc.embedding = embed
@@ -290,7 +290,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         )
         res_docs = []
         for hit in res:
-            hit.pop(EMPTY_FIELD)
+            hit.pop(EMPTY_FIELD, None)
             hit.pop(VECTOR_FIELD, None)
             res_docs.append(Document.from_dict(hit))
         return res_docs
@@ -357,7 +357,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
 
         if index not in self.client.list_collections():
             self._create_collection(index)
@@ -399,7 +399,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 else None
             )
 
-        index = index or self.collection_name
+        index = index or self.index
         if index not in self.client.list_collections():
             self._create_collection(index)
             return 0
@@ -445,7 +445,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         else:
             filters = EMPTY_FIELD + " in [0]"
 
-        index = index or self.collection_name
+        index = index or self.index
 
         if index not in self.client.list_collections():
             self._create_collection(index)
@@ -476,7 +476,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if self.similarity == "cosine":
             self.normalize_embedding(query_emb)
 
-        index = index or self.collection_name
+        index = index or self.index
         return_embedding = return_embedding or self.return_embedding
 
         if index not in self.client.list_collections():
@@ -500,6 +500,7 @@ class MilvusDocumentStore(BaseDocumentStore):
             collection_name=index,
             data=[query_emb],
             filter=filters,
+            output_fields=["*"],
             limit=top_k,
         )
         if return_embedding:
@@ -511,21 +512,21 @@ class MilvusDocumentStore(BaseDocumentStore):
             )
             res_vectors = {val[ID_FIELD]: val[VECTOR_FIELD] for val in res_vectors}
 
-        
-        res_docs = []
-        for hit in res[0]:
-            hit.pop(EMPTY_FIELD)
-            doc = Document.from_dict(hit["entity"])
-            doc.score = (
-                hit["distance"]
-                if not scale_score
-                else self.scale_to_unit_interval(hit["distance"], self.similarity)
-            )
-            if return_embedding:
-                doc.embedding = res_vectors[hit["entity"][ID_FIELD]]
-            res_docs.append(doc)
-
-        return res_docs
+        if len(res) != 0:
+            res_docs = []
+            for hit in res[0]:
+                hit.pop(EMPTY_FIELD, None)
+                doc = Document.from_dict(hit["entity"])
+                doc.score = (
+                    hit["distance"]
+                    if not scale_score
+                    else self.scale_to_unit_interval(hit["distance"], self.similarity)
+                )
+                if return_embedding:
+                    doc.embedding = res_vectors[hit["entity"][ID_FIELD]]
+                res_docs.append(doc)
+            return res_docs
+        return []
 
     # Updated
     def get_label_count(
@@ -534,7 +535,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
         if index not in self.client.list_collections():
             self._create_collection(index)
             return 0
@@ -558,7 +559,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
         if index not in self.client.list_collections():
             self._create_collection(index)
 
@@ -589,7 +590,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
         if index not in self.client.list_collections():
             self._create_collection(index)
             return
@@ -654,7 +655,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
         if index not in self.client.list_collections():
             self._create_collection(index)
             return
@@ -718,7 +719,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
 
         if index not in self.client.list_collections():
             self._create_collection(index)
@@ -761,7 +762,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
         if index not in self.client.list_collections():
             self._create_collection(index)
             return
@@ -800,7 +801,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         :param index: The name of the index to delete.
         :return: None
         """
-        index = index or self.collection_name
+        index = index or self.index
         self.client.drop_collection(index)
 
     def _create_document_field_map(self) -> Dict:
@@ -817,7 +818,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
         if len(ids) == 0:
             return []
 
@@ -838,7 +839,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         )
         res_docs = []
         for hit in res:
-            hit.pop(EMPTY_FIELD)
+            hit.pop(EMPTY_FIELD, None)
             res_docs.append(Document.from_dict(hit))
         return res_docs
 
@@ -862,7 +863,7 @@ class MilvusDocumentStore(BaseDocumentStore):
     def update_document_meta(
         self, id: str, meta: Dict[str, Any], index: Optional[str] = None
     ):
-        index = index or self.collection_name
+        index = index or self.index
         if index not in self.client.list_collections():
             self._create_collection(index)
             return
@@ -891,7 +892,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         This can be useful if you want to add or change the embeddings for your documents (e.g. after changing the
         retriever config).
         """
-        index = index or self.collection_name
+        index = index or self.index
 
         documents = self.get_all_documents(
             index=index, filters=filters, return_embedding=False
@@ -940,7 +941,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
 
         # Drop duplicates in the request
         documents = self._drop_duplicate_documents(documents, index)
@@ -986,7 +987,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 logger.info(
                     "Duplicate Documents: Document with id '%s' already exists in collection '%s'",
                     document.id,
-                    index or self.collection_name,
+                    index or self.index,
                 )
                 continue
             _documents.append(document)
@@ -1009,7 +1010,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if headers:
             raise NotImplementedError("MilvusDocumentStore does not support headers.")
 
-        index = index or self.collection_name
+        index = index or self.index
         if len(ids) == 0:
             return []
 
