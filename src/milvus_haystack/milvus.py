@@ -415,12 +415,10 @@ class MilvusDocumentStore(BaseDocumentStore):
             else:
                 filters = EMPTY_FIELD + " in [0,1]"
 
-        return len(
-            self.client.query(
-                collection_name = index,
-                filter=filters,
-                output_fields=[ID_FIELD],
-            )
+        return self.client.query(
+            collection_name = index,
+            filter=filters,
+            output_fields=["count(*)"],
         )
 
     # Updated
