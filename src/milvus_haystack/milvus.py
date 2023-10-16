@@ -113,7 +113,7 @@ class MilvusDocumentStore(BaseDocumentStore):
     def _create_collection(self, name, recreate=False):
         if recreate:
             self.client.drop_collection(name)
-        
+
         if name not in self.client.list_collections():
             self.client.create_collection(
                 collection_name=name,
@@ -165,8 +165,8 @@ class MilvusDocumentStore(BaseDocumentStore):
 
         if len(documents) == 0:
             return
-        
-        
+
+
         documents = [Document.from_dict(x) if not isinstance(x, Document) else x for x in documents]
 
         if index not in self.client.list_collections():
@@ -281,7 +281,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 embed = hit.pop(VECTOR_FIELD, None)
                 doc = Document.from_dict(hit)
                 doc.embedding = embed
-                res_docs.append(doc)  
+                res_docs.append(doc)
             return res_docs
         res = self.client.query(
             collection_name=index,
@@ -370,7 +370,7 @@ class MilvusDocumentStore(BaseDocumentStore):
             filters += " and " + EMPTY_FIELD + " in [2]"
         else:
             filters = EMPTY_FIELD + " in [2]"
-        
+
         res = self.client.query(
             collection_name=index, filter=filters, output_fields=["*"]
         )
@@ -403,7 +403,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if index not in self.client.list_collections():
             self._create_collection(index)
             return 0
-        
+
         if only_documents_without_embedding:
             if filters is not None:
                 filters += " and " + EMPTY_FIELD + " in [1]"
@@ -439,7 +439,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 if filters
                 else None
             )
-    
+
         if filters is not None:
             filters += " and " + EMPTY_FIELD + " in [0]"
         else:
@@ -489,7 +489,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 if filters
                 else None
             )
-        
+
         if filters is not None:
             filters += " and " + EMPTY_FIELD + " in [0]"
         else:
@@ -625,7 +625,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 filters += " and " + EMPTY_FIELD + " in [0,1]"
             else:
                 filters = EMPTY_FIELD + " in [0,1]"
-    
+
             res = self.client.query(
                 collection_name = index,
                 filter = filters,
@@ -672,7 +672,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 filters += " and " + EMPTY_FIELD + " in [2]"
             else:
                 filters = EMPTY_FIELD + " in [2]"
-    
+
             res = self.client.query(
                 collection_name = index,
                 filter = filters,
@@ -691,7 +691,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 filters += " and " + EMPTY_FIELD + " in [2]"
             else:
                 filters = EMPTY_FIELD + " in [2]"
-    
+
             res = self.client.query(
                 collection_name = index,
                 filter = filters,
@@ -733,7 +733,7 @@ class MilvusDocumentStore(BaseDocumentStore):
             )
         else:
             filters = f'{ID_FIELD} >= ""'
-        
+
         if filters is not None:
             filters += " and " + EMPTY_FIELD + " in [0,1]"
         else:
@@ -787,7 +787,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         )
 
         ids = [hit[ID_FIELD] for hit in res]
-        
+
         self.client.delete(
             collection_name=index,
             pks = ids,
@@ -830,7 +830,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         expr = f"""{ID_FIELD} in [{','.join(ids)}]"""
         # Add the partitions info
         expr += " and " + EMPTY_FIELD + " in [0, 1]"
-        
+
         res = self.client.query(
             collection_name=index,
             filter=expr,
@@ -867,7 +867,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         if index not in self.client.list_collections():
             self._create_collection(index)
             return
-    
+
         res = self._get_dicts_by_id(
             ids = [id],
             index=index,
@@ -880,7 +880,7 @@ class MilvusDocumentStore(BaseDocumentStore):
                 pks = [id],
             )
             self.client.insert(collection_name=index, data=[res])
-    
+
     def update_embeddings(
         self,
         retriever: DenseRetriever,
@@ -902,7 +902,7 @@ class MilvusDocumentStore(BaseDocumentStore):
             embeddings = retriever.embed_documents([doc])
             if embeddings.size == 0:
                 continue
-    
+
             self._validate_embeddings_shape(
                 embeddings=embeddings, num_documents=1, embedding_dim=self.dimension
             )
@@ -994,7 +994,7 @@ class MilvusDocumentStore(BaseDocumentStore):
             _hash_ids.add(document.id)
 
         return _documents
-    
+
     def _primary_key_to_full_docs(self, keys, index):
         res = self.client.get(index, None)
         return res
@@ -1022,7 +1022,7 @@ class MilvusDocumentStore(BaseDocumentStore):
         expr = f"""{ID_FIELD} in [{','.join(ids)}]"""
         # Add the partitions info
         expr += " and " + EMPTY_FIELD + " in [0, 1]"
-        
+
         res = self.client.query(
             collection_name=index,
             filter=expr,
