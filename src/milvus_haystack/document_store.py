@@ -1,16 +1,11 @@
-# SPDX-FileCopyrightText: 2023-present John Doe <jd@example.com>
-#
-# SPDX-License-Identifier: Apache-2.0
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Dict, Optional, Union, Any
 from uuid import uuid4
-
 from haystack import Document, default_from_dict, default_to_dict
 from haystack.document_stores.types import DuplicatePolicy
 from haystack.errors import FilterError
 from pymilvus import MilvusException
-
-from .filters import parse_filters
+from milvus_haystack.filters import parse_filters
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +20,7 @@ DEFAULT_MILVUS_CONNECTION = {
 
 class MilvusDocumentStore:
     """
-    Except for the __init__(), signatures of any other method in this class must not change.
+    Milvus Document Store.
     """
 
     def __init__(
@@ -47,14 +42,35 @@ class MilvusDocumentStore:
             replica_number: int = 1,
             timeout: Optional[float] = None,
     ):
-        """Initialize the Milvus vector store."""
+        """
+        Initialize the Milvus vector store.
+
+        :param collection_name: The name of the collection to be created.
+            "HaystackCollection" as default.
+        :param collection_description: The description of the collection.
+        :param collection_properties: The properties of the collection.
+            Defaults to None.
+            If set, will override collection existing properties.
+            For example: {"collection.ttl.seconds": 60}.
+        :param connection_args: The connection args used for this class comes in the form of a dict.
+        :param consistency_level: The consistency level to use for a collection.
+            Defaults to "Session".
+        :param search_params: Which search params to use. Defaults to default of index.
+        :param drop_old: Whether to drop the current collection.
+            Defaults to False.
+        :param primary_field: Name of the primary key field. Defaults to "id".
+        :param text_field: Name of the text field. Defaults to "text".
+        :param vector_field: Name of the vector field. Defaults to "vector".
+        :param partition_key_field: Name of the partition key field. Defaults to None.
+        :param partition_names: List of partition names. Defaults to None.
+        :param replica_number: Number of replicas. Defaults to 1.
+        :param timeout: Timeout in seconds. Defaults to None.
+        """
         try:
             from pymilvus import Collection, utility
-        except ImportError:
-            raise ValueError(
-                "Could not import pymilvus python package. "
-                "Please install it with `pip install pymilvus`."
-            )
+        except ImportError as err:
+            err_msg = "Could not import pymilvus python package. Please install it with `pip install pymilvus`."
+            raise ValueError(err_msg) from err
 
         # Default search params when one is not provided.
         self.default_search_params = {
@@ -70,7 +86,6 @@ class MilvusDocumentStore:
             "AUTOINDEX": {"metric_type": "L2", "params": {}},
         }
 
-        # self.embedding_func = embedding_function
         self.collection_name = collection_name
         self.collection_description = collection_description
         self.collection_properties = collection_properties
@@ -81,9 +96,7 @@ class MilvusDocumentStore:
         self.drop_old = drop_old
 
         self._primary_field = primary_field
-        # In order for compatibility, the text field will need to be called "text"
         self._text_field = text_field
-        # In order for compatibility, the vector field needs to be called "vector"
         self._vector_field = vector_field
         self._partition_key_field = partition_key_field
         self.fields: List[str] = []
@@ -120,6 +133,8 @@ class MilvusDocumentStore:
     def count_documents(self) -> int:
         """
         Returns how many documents are present in the document store.
+
+        :return: The number of documents in the document store.
         """
         if self.col is None:
             logger.debug("No existing collection to count.")
@@ -195,8 +210,8 @@ class MilvusDocumentStore:
             ],
         }
 
-        :param filters: the filters to apply to the document list.
-        :return: a list of Documents that match the given filters.
+        :param filters: The filters to apply to the document list.
+        :return: A list of Documents that match the given filters.
         """
         if self.col is None:
             logger.debug("No existing collection to filter.")
@@ -216,32 +231,29 @@ class MilvusDocumentStore:
                 expr=expr,
                 output_fields=output_fields,
             )
-        except MilvusException as e:
+        except MilvusException as err:
             logger.error(
                 "Failed to query documents with filters expr: %s", expr
             )
-            raise FilterError(e)
+            raise FilterError(err) from err
         docs = [self._parse_document(d) for d in res]
         return docs
 
     def write_documents(self, documents: List[Document], policy: DuplicatePolicy = DuplicatePolicy.NONE) -> int:
         """
-        Writes (or overwrites) documents into the store.
+        Writes documents into the store.
 
-        :param documents: a list of documents.
-        :param policy: documents with the same ID count as duplicates. When duplicates are met,
-            the store can:
-             - skip: keep the existing document and ignore the new one.
-             - overwrite: remove the old document and write the new one.
-             - fail: an error is raised
-        :raises DuplicateDocumentError: Exception trigger on duplicate document if `policy=DuplicatePolicy.FAIL`
-        :return: None
+        :param documents: A list of documents.
+        :param policy: Documents with the same ID count as duplicates.
+            MilvusStore only supports `DuplicatePolicy.NONE`
+        :return: Number of documents written.
         """
 
         from pymilvus import Collection, MilvusException
 
         if len(documents) > 0 and not isinstance(documents[0], Document):
-            raise ValueError("param 'documents' must contain a list of objects of type Document")
+            err_msg = "param 'documents' must contain a list of objects of type Document"
+            raise ValueError(err_msg)
 
         if policy not in [DuplicatePolicy.NONE]:
             logger.warning(
@@ -263,7 +275,7 @@ class MilvusDocumentStore:
                 dummy_vector = [-10.0] * embedding_dim
                 doc.embedding = dummy_vector
             if doc.content is None:
-                doc.content = ''
+                doc.content = ""
         if empty_embedding:
             logger.warning(
                 "Milvus is a purely vector database, but document has no embedding. "
@@ -281,7 +293,7 @@ class MilvusDocumentStore:
             return 0
 
         # If the collection hasn't been initialized yet, perform all steps to do so
-        kwargs = dict()
+        kwargs = {}
         if not isinstance(self.col, Collection):
             kwargs = {"embeddings": embeddings, "metas": metas}
             if self.partition_names:
@@ -324,20 +336,19 @@ class MilvusDocumentStore:
                 # res: Collection
                 res = self.col.insert(insert_list, timeout=None, **kwargs)
                 ids.extend(res.primary_keys)
-            except MilvusException as e:
+            except MilvusException as err:
                 logger.error(
                     "Failed to insert batch starting at entity: %s/%s", i, total_count
                 )
-                raise e
+                raise err
         self.col.flush()
         return len(ids)
 
     def delete_documents(self, document_ids: List[str]) -> None:
         """
         Deletes all documents with a matching document_ids from the document store.
-        Fails with `MissingDocumentError` if no document with this id is present in the store.
 
-        :param object_ids: the object_ids to delete
+        :param document_ids: The object_ids to delete
         """
         if self.col is None:
             logger.debug("No existing collection to delete.")
@@ -347,6 +358,11 @@ class MilvusDocumentStore:
         self.col.delete(expr)
 
     def to_dict(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary representation of the document store.
+
+        :return: A dictionary representation of the document store.
+        """
         init_parameters = {
             "collection_name": self.collection_name,
             "collection_description": self.collection_description,
@@ -368,6 +384,12 @@ class MilvusDocumentStore:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MilvusDocumentStore":
+        """
+        Creates a new document store from a dictionary.
+
+        :param data: The dictionary to use to create the document store.
+        :return: A new document store.
+        """
         return default_from_dict(cls, data)
 
     def _create_connection_alias(self, connection_args: dict) -> str:
@@ -390,8 +412,9 @@ class MilvusDocumentStore:
             elif uri.startswith("http://"):
                 given_address = uri.split("http://")[1]
             else:
-                logger.error("Invalid Milvus URI: %s", uri)
-                raise ValueError("Invalid Milvus URI: %s", uri)
+                err_msg = "Invalid Milvus URI: %s", uri
+                logger.error(err_msg)
+                raise ValueError(err_msg)
         elif address is not None:
             given_address = address
         else:
@@ -424,9 +447,9 @@ class MilvusDocumentStore:
             connections.connect(alias=alias, **connection_args)
             logger.debug("Created new connection using: %s", alias)
             return alias
-        except MilvusException as e:
+        except MilvusException as err:
             logger.error("Failed to create new connection using: %s", alias)
-            raise e
+            raise err
 
     def _init(
             self,
@@ -469,16 +492,11 @@ class MilvusDocumentStore:
                 # Infer the corresponding datatype of the meta
                 dtype = infer_dtype_bydata(value)
                 # Datatype isn't compatible
-                if dtype == DataType.UNKNOWN or dtype == DataType.NONE:
-                    logger.error(
-                        (
-                            "Failure to create collection, "
-                            "unrecognized dtype for key: %s"
-                        ),
-                        key,
-                    )
-                    raise ValueError(f"Unrecognized datatype for {key}.")
-                # Dataype is a string/varchar equivalent
+                if dtype in [DataType.UNKNOWN, DataType.NONE]:
+                    err_msg = f"Failure to create collection, unrecognized dtype for key: {key}"
+                    logger.error(err_msg)
+                    raise ValueError(err_msg)
+                # Datatype is a string/varchar equivalent
                 elif dtype == DataType.VARCHAR:
                     fields.append(
                         FieldSchema(key, DataType.VARCHAR, max_length=65_535)
@@ -519,11 +537,11 @@ class MilvusDocumentStore:
             # Set the collection properties if they exist
             if self.collection_properties is not None:
                 self.col.set_properties(self.collection_properties)
-        except MilvusException as e:
+        except MilvusException as err:
             logger.error(
-                "Failed to create collection: %s error: %s", self.collection_name, e
+                "Failed to create collection: %s error: %s", self.collection_name, err
             )
-            raise e
+            raise err
 
     def _extract_fields(self) -> None:
         """Grab the existing fields from the Collection"""
@@ -573,11 +591,11 @@ class MilvusDocumentStore:
                     self.collection_name,
                 )
 
-            except MilvusException as e:
+            except MilvusException as err:
                 logger.error(
                     "Failed to create an index on collection: %s", self.collection_name
                 )
-                raise e
+                raise err
 
     def _create_search_params(self) -> None:
         """Generate search params based on the current index type"""

@@ -1,5 +1,4 @@
-from typing import Dict, Any, Union
-
+from typing import Dict, Union, Any
 from haystack.errors import FilterError
 
 LOGIC_OPERATORS = [
@@ -21,17 +20,6 @@ COMPARISON_OPERATORS = [
 
 
 def _value_to_str(value: Union[int, float, str, list]) -> str:
-    """Convert a value to a string and add double quotes if it is a string.
-
-    It required for comparators involving strings.
-
-    Args:
-        value: The value to convert.
-
-    Returns:
-        The converted value as a string.
-    """
-    #
     if isinstance(value, str):
         # If the value is already a string, add double quotes
         return f'"{value}"'
@@ -40,6 +28,11 @@ def _value_to_str(value: Union[int, float, str, list]) -> str:
 
 
 def parse_filters(filters: Dict[str, Any]) -> str:
+    """
+    Parse the filters dictionary into a string which used for milvus expr query.
+    :param filters: The filters dictionary.
+    :return: The parsed expr.
+    """
     if not isinstance(filters, dict):
         msg = "Filters must be a dictionary"
         raise FilterError(msg)

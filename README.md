@@ -1,4 +1,4 @@
-# milvus-documentstore
+# Milvus Document Store for Haystack
 
 
 ## Installation
@@ -16,11 +16,16 @@ Then, to use the `MilvusDocumentStore` in a Haystack pipeline"
 from haystack import Document
 from milvus_haystack import MilvusDocumentStore
 
-ds = MilvusDocumentStore()
-ds.write_documents([Document("Some Content")])
-ds.get_all_documents()  # prints [<Document: {'content': 'foo', 'content_type': 'text', ...>]
+document_store = MilvusDocumentStore()
+documents = [Document(
+    content="A Foo Document",
+    meta={"page": "100", "chapter": "intro"},
+    embedding=[-10.0] * 128,
+)]
+document_store.write_documents(documents)
+document_store.count_documents()  # 1
 ```
 
 ## License
 
-`milvus-documentstore` is distributed under the terms of the [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) license.
+`milvus-haystack` is distributed under the terms of the [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) license.

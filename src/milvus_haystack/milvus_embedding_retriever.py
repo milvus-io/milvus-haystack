@@ -1,29 +1,21 @@
-# SPDX-FileCopyrightText: 2023-present John Doe <jd@example.com>
-#
-# SPDX-License-Identifier: Apache-2.0
 from typing import Any, Dict, Optional, List
-
 from haystack import component, Document
-
-from src.milvus_haystack import MilvusDocumentStore
+from milvus_haystack import MilvusDocumentStore
 
 
 @component
 class MilvusEmbeddingRetriever:
     """
-    A component for retrieving documents from an ExampleDocumentStore.
+    A component for retrieving documents from an Milvus Document Store.
     """
 
     def __init__(self, document_store: MilvusDocumentStore, filters: Optional[Dict[str, Any]] = None, top_k: int = 10):
         """
-        Create an ExampleRetriever component. Usually you pass some basic configuration
-        parameters to the constructor.
+        Initializes a new instance of the MilvusEmbeddingRetriever.
 
-        :param document_store: A Document Store object used to retrieve documents
+        :param document_store: A Milvus Document Store object used to retrieve documents.
         :param filters: A dictionary with filters to narrow down the search space (default is None).
         :param top_k: The maximum number of documents to retrieve (default is 10).
-
-        :raises ValueError: If the specified top_k is not > 0.
         """
         self.filters = filters
         self.top_k = top_k
@@ -32,10 +24,10 @@ class MilvusEmbeddingRetriever:
     @component.output_types(documents=List[Document])
     def run(self, query_embedding: List[float]):
         """
-        Retrieve documents from the `PineconeDocumentStore`, based on their dense embeddings.
+        Retrieve documents from the `MilvusDocumentStore`, based on their dense embeddings.
 
         :param query_embedding: Embedding of the query.
-        :returns: List of Document similar to `query_embedding`.
+        :return: List of Document similar to `query_embedding`.
         """
         docs = self.document_store._embedding_retrieval(
             query_embedding=query_embedding,
@@ -43,4 +35,3 @@ class MilvusEmbeddingRetriever:
             top_k=self.top_k,
         )
         return {"documents": docs}
-

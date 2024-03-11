@@ -28,13 +28,14 @@ dependencies = [
   "haystack-ai",
   "typing_extensions",
   "pymilvus",
+  "milvus",
   "farm-haystack"
 ]
 
 [project.urls]
-Documentation = "https://github.com/unknown/milvus-haystack#readme"
-Issues = "https://github.com/unknown/milvus-haystack/issues"
-Source = "https://github.com/unknown/milvus-haystack"
+Documentation = "https://github.com/milvus-io/milvus-haystack#readme"
+Issues = "https://github.com/milvus-io/milvus-haystack/issues"
+Source = "https://github.com/milvus-io/milvus-haystack"
 
 [tool.hatch.version]
 path = "src/milvus_haystack/__about__.py"
