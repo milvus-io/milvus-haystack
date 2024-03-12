@@ -1,10 +1,12 @@
 import logging
-from typing import List, Dict, Optional, Union, Any
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
+
 from haystack import Document, default_from_dict, default_to_dict
 from haystack.document_stores.types import DuplicatePolicy
 from haystack.errors import FilterError
 from pymilvus import MilvusException
+
 from milvus_haystack.filters import parse_filters
 
 logger = logging.getLogger(__name__)
@@ -24,23 +26,23 @@ class MilvusDocumentStore:
     """
 
     def __init__(
-            self,
-            collection_name: str = "HaystackCollection",
-            collection_description: str = "",
-            collection_properties: Optional[Dict[str, Any]] = None,
-            connection_args: Optional[Dict[str, Any]] = None,
-            consistency_level: str = "Session",
-            index_params: Optional[dict] = None,
-            search_params: Optional[dict] = None,
-            drop_old: Optional[bool] = False,
-            *,
-            primary_field: str = "id",
-            text_field: str = "text",
-            vector_field: str = "vector",
-            partition_key_field: Optional[str] = None,
-            partition_names: Optional[list] = None,
-            replica_number: int = 1,
-            timeout: Optional[float] = None,
+        self,
+        collection_name: str = "HaystackCollection",
+        collection_description: str = "",
+        collection_properties: Optional[Dict[str, Any]] = None,
+        connection_args: Optional[Dict[str, Any]] = None,
+        consistency_level: str = "Session",
+        index_params: Optional[dict] = None,
+        search_params: Optional[dict] = None,
+        drop_old: Optional[bool] = False,  # noqa: FBT002
+        *,
+        primary_field: str = "id",
+        text_field: str = "text",
+        vector_field: str = "vector",
+        partition_key_field: Optional[str] = None,
+        partition_names: Optional[list] = None,
+        replica_number: int = 1,
+        timeout: Optional[float] = None,
     ):
         """
         Initialize the Milvus vector store.
@@ -232,9 +234,7 @@ class MilvusDocumentStore:
                 output_fields=output_fields,
             )
         except MilvusException as err:
-            logger.error(
-                "Failed to query documents with filters expr: %s", expr
-            )
+            logger.error("Failed to query documents with filters expr: %s", expr)
             raise FilterError(err) from err
         docs = [self._parse_document(d) for d in res]
         return docs
@@ -293,7 +293,7 @@ class MilvusDocumentStore:
             return 0
 
         # If the collection hasn't been initialized yet, perform all steps to do so
-        kwargs = {}
+        kwargs: Dict[str, Any] = {}
         if not isinstance(self.col, Collection):
             kwargs = {"embeddings": embeddings, "metas": metas}
             if self.partition_names:
@@ -322,10 +322,9 @@ class MilvusDocumentStore:
         vectors: list = insert_dict[self._vector_field]
         total_count = len(vectors)
 
-        ids: list[str] = []
-
         batch_size = 1000
-        assert isinstance(self.col, Collection)
+        if not isinstance(self.col, Collection):
+            raise MilvusException(message="Collection is not initialized")
         for i in range(0, total_count, batch_size):
             # Grab end index
             end = min(i + batch_size, total_count)
@@ -337,9 +336,7 @@ class MilvusDocumentStore:
                 res = self.col.insert(insert_list, timeout=None, **kwargs)
                 ids.extend(res.primary_keys)
             except MilvusException as err:
-                logger.error(
-                    "Failed to insert batch starting at entity: %s/%s", i, total_count
-                )
+                logger.error("Failed to insert batch starting at entity: %s/%s", i, total_count)
                 raise err
         self.col.flush()
         return len(ids)
@@ -432,11 +429,11 @@ class MilvusDocumentStore:
             for con in connections.list_connections():
                 addr = connections.get_connection_addr(con[0])
                 if (
-                        con[1]
-                        and ("address" in addr)
-                        and (addr["address"] == given_address)
-                        and ("user" in addr)
-                        and (addr["user"] == tmp_user)
+                    con[1]
+                    and ("address" in addr)
+                    and (addr["address"] == given_address)
+                    and ("user" in addr)
+                    and (addr["user"] == tmp_user)
                 ):
                     logger.debug("Using previous connection: %s", con[0])
                     return con[0]
@@ -452,12 +449,12 @@ class MilvusDocumentStore:
             raise err
 
     def _init(
-            self,
-            embeddings: Optional[List] = None,
-            metas: Optional[List[Dict]] = None,
-            partition_names: Optional[List] = None,
-            replica_number: int = 1,
-            timeout: Optional[float] = None,
+        self,
+        embeddings: Optional[List] = None,
+        metas: Optional[List[Dict]] = None,
+        partition_names: Optional[List] = None,
+        replica_number: int = 1,
+        timeout: Optional[float] = None,
     ) -> None:
         if embeddings is not None:
             self._create_collection(embeddings, metas)
@@ -470,9 +467,7 @@ class MilvusDocumentStore:
             timeout=timeout,
         )
 
-    def _create_collection(
-            self, embeddings: list, metas: Optional[List[Dict]] = None
-    ) -> None:
+    def _create_collection(self, embeddings: list, metas: Optional[List[Dict]] = None) -> None:
         from pymilvus import (
             Collection,
             CollectionSchema,
@@ -498,26 +493,16 @@ class MilvusDocumentStore:
                     raise ValueError(err_msg)
                 # Datatype is a string/varchar equivalent
                 elif dtype == DataType.VARCHAR:
-                    fields.append(
-                        FieldSchema(key, DataType.VARCHAR, max_length=65_535)
-                    )
+                    fields.append(FieldSchema(key, DataType.VARCHAR, max_length=65_535))
                 else:
                     fields.append(FieldSchema(key, dtype))
 
         # Create the text field
-        fields.append(
-            FieldSchema(self._text_field, DataType.VARCHAR, max_length=65_535)
-        )
+        fields.append(FieldSchema(self._text_field, DataType.VARCHAR, max_length=65_535))
         # Create the primary key field
-        fields.append(
-            FieldSchema(
-                self._primary_field, DataType.VARCHAR, is_primary=True, max_length=65_535
-            )
-        )
+        fields.append(FieldSchema(self._primary_field, DataType.VARCHAR, is_primary=True, max_length=65_535))
         # Create the vector field, supports binary or float vectors
-        fields.append(
-            FieldSchema(self._vector_field, infer_dtype_bydata(embeddings[0]), dim=dim)
-        )
+        fields.append(FieldSchema(self._vector_field, infer_dtype_bydata(embeddings[0]), dim=dim))
 
         # Create the schema for the collection
         schema = CollectionSchema(
@@ -538,9 +523,7 @@ class MilvusDocumentStore:
             if self.collection_properties is not None:
                 self.col.set_properties(self.collection_properties)
         except MilvusException as err:
-            logger.error(
-                "Failed to create collection: %s error: %s", self.collection_name, err
-            )
+            logger.error("Failed to create collection: %s error: %s", self.collection_name, err)
             raise err
 
     def _extract_fields(self) -> None:
@@ -592,9 +575,7 @@ class MilvusDocumentStore:
                 )
 
             except MilvusException as err:
-                logger.error(
-                    "Failed to create an index on collection: %s", self.collection_name
-                )
+                logger.error("Failed to create an index on collection: %s", self.collection_name)
                 raise err
 
     def _create_search_params(self) -> None:
@@ -620,20 +601,19 @@ class MilvusDocumentStore:
         return None
 
     def _load(
-            self,
-            partition_names: Optional[list] = None,
-            replica_number: int = 1,
-            timeout: Optional[float] = None,
+        self,
+        partition_names: Optional[list] = None,
+        replica_number: int = 1,
+        timeout: Optional[float] = None,
     ) -> None:
         """Load the collection if available."""
         from pymilvus import Collection, utility
         from pymilvus.client.types import LoadState
 
         if (
-                isinstance(self.col, Collection)
-                and self._get_index() is not None
-                and utility.load_state(self.collection_name, using=self.alias)
-                == LoadState.NotLoad
+            isinstance(self.col, Collection)
+            and self._get_index() is not None
+            and utility.load_state(self.collection_name, using=self.alias) == LoadState.NotLoad
         ):
             self.col.load(
                 partition_names=partition_names,
@@ -642,11 +622,8 @@ class MilvusDocumentStore:
             )
 
     def _embedding_retrieval(
-            self,
-            query_embedding: List[float],
-            filters: Optional[Dict[str, Any]] = None,
-            top_k: int = 10
-    ):
+        self, query_embedding: List[float], filters: Optional[Dict[str, Any]] = None, top_k: int = 10
+    ) -> List[Document]:
         if self.col is None:
             logger.debug("No existing collection to search.")
             return []

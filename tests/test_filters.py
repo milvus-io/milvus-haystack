@@ -1,28 +1,34 @@
+import logging
+from typing import List
+
 import numpy as np
 import pytest
-from typing import List
 from haystack import Document
 from haystack.testing.document_store import FilterDocumentsTest, _random_embeddings
+
 from src.milvus_haystack import MilvusDocumentStore
+
+logger = logging.getLogger(__name__)
 
 
 class TestMilvusFilters(FilterDocumentsTest):
     from milvus import MilvusServer
+
     milvus_server = MilvusServer()
-    milvus_server.set_base_dir('test_milvus_base')
+    milvus_server.set_base_dir("test_milvus_base")
     milvus_server.listen_port = 19530
     try:
         milvus_server.stop()
-    except:
-        pass
+    except Exception as err:
+        logger.debug("Can not stop Milvus server. %s", err)
     try:
         milvus_server.cleanup()
-    except:
-        pass
+    except Exception as err:
+        logger.debug("Can not cleanup Milvus. %s", err)
     try:
         milvus_server.start()
-    except:
-        pass
+    except Exception as err:
+        logger.debug("Can not start Milvus server. %s", err)
 
     @pytest.fixture
     def filterable_docs(self) -> List[Document]:
@@ -103,65 +109,49 @@ class TestMilvusFilters(FilterDocumentsTest):
             assert np.allclose(np.array(r.embedding), np.array(e.embedding), atol=1e-4)
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with dataframe")
-    def test_comparison_equal_with_dataframe(self, document_store, filterable_docs):
-        ...
+    def test_comparison_equal_with_dataframe(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with dataframe")
-    def test_comparison_not_equal_with_dataframe(self, document_store, filterable_docs):
-        ...
+    def test_comparison_not_equal_with_dataframe(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with dataframe")
-    def test_comparison_greater_than_with_dataframe(self, document_store, filterable_docs):
-        ...
+    def test_comparison_greater_than_with_dataframe(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with dataframe")
-    def test_comparison_greater_than_equal_with_dataframe(self, document_store, filterable_docs):
-        ...
+    def test_comparison_greater_than_equal_with_dataframe(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with dataframe")
-    def test_comparison_less_than_with_dataframe(self, document_store, filterable_docs):
-        ...
+    def test_comparison_less_than_with_dataframe(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with dataframe")
-    def test_comparison_less_than_equal_with_dataframe(self, document_store, filterable_docs):
-        ...
+    def test_comparison_less_than_equal_with_dataframe(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with Dates")
-    def test_comparison_greater_than_with_iso_date(self, document_store, filterable_docs):
-        ...
+    def test_comparison_greater_than_with_iso_date(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with Dates")
-    def test_comparison_greater_than_equal_with_iso_date(self, document_store, filterable_docs):
-        ...
+    def test_comparison_greater_than_equal_with_iso_date(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with Dates")
-    def test_comparison_less_than_with_iso_date(self, document_store, filterable_docs):
-        ...
+    def test_comparison_less_than_with_iso_date(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with Dates")
-    def test_comparison_less_than_equal_with_iso_date(self, document_store, filterable_docs):
-        ...
+    def test_comparison_less_than_equal_with_iso_date(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with None")
-    def test_comparison_equal_with_none(self, document_store, filterable_docs):
-        ...
+    def test_comparison_equal_with_none(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with None")
-    def test_comparison_not_equal_with_none(self, document_store, filterable_docs):
-        ...
+    def test_comparison_not_equal_with_none(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with None")
-    def test_comparison_greater_than_with_none(self, document_store, filterable_docs):
-        ...
+    def test_comparison_greater_than_with_none(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with None")
-    def test_comparison_greater_than_equal_with_none(self, document_store, filterable_docs):
-        ...
+    def test_comparison_greater_than_equal_with_none(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with None")
-    def test_comparison_less_than_with_none(self, document_store, filterable_docs):
-        ...
+    def test_comparison_less_than_with_none(self, document_store, filterable_docs): ...
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with None")
-    def test_comparison_less_than_equal_with_none(self, document_store, filterable_docs):
-        ...
+    def test_comparison_less_than_equal_with_none(self, document_store, filterable_docs): ...
