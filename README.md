@@ -1,6 +1,5 @@
 # Milvus Document Store for Haystack
 
-
 ## Installation
 
 ```console
@@ -8,7 +7,10 @@ pip install -e milvus-haystack
 ```
 
 ## Usage
-First, to start up a Milvus service, follow the ['Start Milvus'](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus) instructions in the documentation. 
+
+First, to start up a Milvus service, follow
+the ['Start Milvus'](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus) instructions in the
+documentation.
 
 Then, to use the `MilvusDocumentStore` in a Haystack pipeline"
 

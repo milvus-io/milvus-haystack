@@ -36,7 +36,7 @@ class TestMilvusFilters(FilterDocumentsTest):
                         "page": "100",
                         "chapter": "intro",
                         "number": 2,
-                        "date": "1969-07-21T20:17:40",
+                        "date": "1969-07-22T20:17:40",
                     },
                     embedding=_random_embeddings(768),
                 )
