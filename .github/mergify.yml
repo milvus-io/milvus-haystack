@@ -30,7 +30,7 @@ pull_request_rules:
       - or:
           - base=main
           - base~=^2(\.\d+){1,2}$
-      - 'status-success=Lint and Test'
+      - 'status-success=Lint and Test / Run Lint and Tests (3.9) (pull_request) '
     actions:
       label:
         add:
@@ -42,7 +42,7 @@ pull_request_rules:
         - base=main
         - base~=^2(\.\d+){1,2}$
       - or:
-        - 'status-success=Lint and Test'
+        - 'status-success=Lint and Test / Run Lint and Tests (3.9) (pull_request) '
     actions:
       label:
         remove:
