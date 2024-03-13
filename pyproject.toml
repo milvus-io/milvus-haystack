@@ -29,7 +29,6 @@ dependencies = [
   "typing_extensions",
   "pymilvus",
   "milvus",
-  "farm-haystack"
 ]
 
 [project.urls]
@@ -68,7 +67,7 @@ dependencies = [
   "ruff>=0.0.243",
 ]
 [tool.hatch.envs.lint.scripts]
-typing = "mypy --install-types --non-interactive {args:src/milvus_haystack tests}"
+typing = "mypy --install-types --non-interactive --explicit-package-bases {args:src/ tests}"
 style = [
   "ruff {args:.}",
   "black --check --diff {args:.}",
@@ -175,6 +174,10 @@ markers = [
 [[tool.mypy.overrides]]
 module = [
   "haystack.*",
+  "milvus_haystack.*",
+  "pymilvus.*",
+  "numpy",
+  "milvus",
   "pytest.*"
 ]
 ignore_missing_imports = true

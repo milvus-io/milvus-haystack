@@ -1,5 +1,7 @@
-from typing import Any, Dict, Optional, List
-from haystack import component, Document
+from typing import Any, Dict, List, Optional
+
+from haystack import Document, component
+
 from milvus_haystack import MilvusDocumentStore
 
 
@@ -22,7 +24,7 @@ class MilvusEmbeddingRetriever:
         self.document_store = document_store
 
     @component.output_types(documents=List[Document])
-    def run(self, query_embedding: List[float]):
+    def run(self, query_embedding: List[float]) -> Dict[str, List[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense embeddings.
 

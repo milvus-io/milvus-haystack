@@ -1,27 +1,34 @@
+import logging
+import time
+
 import pytest
 from haystack import Document
 from haystack.document_stores.types import DocumentStore
-from haystack.testing.document_store import CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsTest
+from haystack.testing.document_store import CountDocumentsTest, DeleteDocumentsTest, WriteDocumentsTest
+
 from src.milvus_haystack import MilvusDocumentStore
+
+logger = logging.getLogger(__name__)
 
 
 class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsTest):
     from milvus import MilvusServer
+
     milvus_server = MilvusServer()
     milvus_server.set_base_dir("test_milvus_base")
     milvus_server.listen_port = 19530
     try:
         milvus_server.stop()
-    except:
-        pass
+    except Exception as err:
+        logger.debug("Can not stop Milvus server. %s", err)
     try:
         milvus_server.cleanup()
-    except:
-        pass
+    except Exception as err:
+        logger.debug("Can not cleanup Milvus. %s", err)
     try:
         milvus_server.start()
-    except:
-        pass
+    except Exception as err:
+        logger.debug("Can not start Milvus server. %s", err)
 
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
@@ -42,17 +49,26 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         )
         assert document_store.count_documents() == 3
 
-    @pytest.mark.skip(reason="Milvus does not currently check if entity primary keys are duplicates")
-    def test_write_documents_duplicate_fail(self, document_store: DocumentStore):
-        ...
+    def test_delete_documents(self, document_store: DocumentStore):
+        """
+        Test delete_documents() normal behaviour.
+        """
+        doc = Document(content="test doc")
+        document_store.write_documents([doc])
+        assert document_store.count_documents() == 1
+
+        document_store.delete_documents([doc.id])
+        time.sleep(1)
+        assert document_store.count_documents() == 0
 
     @pytest.mark.skip(reason="Milvus does not currently check if entity primary keys are duplicates")
-    def test_write_documents_duplicate_skip(self, document_store: DocumentStore):
-        ...
+    def test_write_documents_duplicate_fail(self, document_store: DocumentStore): ...
 
     @pytest.mark.skip(reason="Milvus does not currently check if entity primary keys are duplicates")
-    def test_write_documents_duplicate_overwrite(self, document_store: DocumentStore):
-        ...
+    def test_write_documents_duplicate_skip(self, document_store: DocumentStore): ...
+
+    @pytest.mark.skip(reason="Milvus does not currently check if entity primary keys are duplicates")
+    def test_write_documents_duplicate_overwrite(self, document_store: DocumentStore): ...
 
     def test_to_and_from_dict(self, document_store: MilvusDocumentStore):
         document_store_dict = document_store.to_dict()
@@ -62,13 +78,7 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
                 "collection_name": "HaystackCollection",
                 "collection_description": "",
                 "collection_properties": None,
-                "connection_args": {
-                    "host": "localhost",
-                    "port": "19530",
-                    "user": "",
-                    "password": "",
-                    "secure": False
-                },
+                "connection_args": {"host": "localhost", "port": "19530", "user": "", "password": "", "secure": False},
                 "consistency_level": "Session",
                 "index_params": None,
                 "search_params": None,
@@ -79,8 +89,8 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
                 "partition_key_field": None,
                 "partition_names": None,
                 "replica_number": 1,
-                "timeout": None
-            }
+                "timeout": None,
+            },
         }
         assert document_store_dict == expected_dict
         reconstructed_document_store = MilvusDocumentStore.from_dict(document_store_dict)

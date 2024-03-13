@@ -1,0 +1,10 @@
+filters:
+  ".*":
+    reviewers:
+      - jaelgu
+      - zc277584121
+      - codingjaguar
+    approvers:
+      - jaelgu
+      - zc277584121
+      - codingjaguar
