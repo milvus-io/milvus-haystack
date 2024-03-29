@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9']
+        python-version: [ '3.9' ]
     
     steps:
       - name: Checkout code
@@ -34,5 +34,17 @@ jobs:
       - name: Lint
         run: hatch run lint:all
 
-      - name: Run tests 
+      - name: Run Milvus
+        run: |
+          wget https://github.com/milvus-io/milvus/releases/download/v2.4.0-rc.1/milvus-standalone-docker-compose.yml -O docker-compose.yml
+          sudo docker compose up -d
+          sleep 5
+          echo "\nMilvus server started!"
+
+      - name: Run tests
         run: hatch run cov
+
+      - name: Stop and Remove Milvus
+        run: |
+          sudo docker compose down
+          echo "\nMilvus server stopped and removed!"

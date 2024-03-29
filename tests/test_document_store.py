@@ -12,24 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsTest):
-    from milvus import MilvusServer
-
-    milvus_server = MilvusServer()
-    milvus_server.set_base_dir("test_milvus_base")
-    milvus_server.listen_port = 19530
-    try:
-        milvus_server.stop()
-    except Exception as err:
-        logger.debug("Can not stop Milvus server. %s", err)
-    try:
-        milvus_server.cleanup()
-    except Exception as err:
-        logger.debug("Can not cleanup Milvus. %s", err)
-    try:
-        milvus_server.start()
-    except Exception as err:
-        logger.debug("Can not start Milvus server. %s", err)
-
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(

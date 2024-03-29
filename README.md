@@ -3,7 +3,6 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 
-
 ## Installation
 
 ```console
@@ -11,11 +10,14 @@ pip install milvus-haystack
 ```
 
 ## Usage
-First, to start up a Milvus service, follow the ['Start Milvus'](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus) instructions in the documentation. 
+
+First, to start up a Milvus service, follow
+the ['Start Milvus'](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus) instructions in the
+documentation.
 
 Then, to use the `MilvusDocumentStore` in a Haystack pipeline"
 
-```py
+```python
 from haystack import Document
 from milvus_haystack import MilvusDocumentStore
 
@@ -33,8 +35,9 @@ document_store.count_documents()  # 1
 
 Here are the ways to build index, retrieval, and build rag pipeline respectively.
 
-```py
-# Create the indexing Pipeline and index some documents
+### Create the indexing Pipeline and index some documents
+
+```python
 import glob
 import os
 
@@ -70,9 +73,11 @@ indexing_pipeline.connect("embedder", "writer")
 indexing_pipeline.run({"converter": {"sources": file_paths}})
 
 print("Number of documents:", document_store.count_documents())
+```
 
-# ------------------------------------------------------------------------------------
-# Create the retrieval pipeline and try a query
+### Create the retrieval pipeline and try a query
+
+```python
 question = "What is Milvus?"
 
 retrieval_pipeline = Pipeline()
@@ -85,9 +90,11 @@ retrieval_results = retrieval_pipeline.run({"embedder": {"text": question}})
 for doc in retrieval_results["retriever"]["documents"]:
     print(doc.content)
     print("-" * 10)
+```
 
-# ------------------------------------------------------------------------------------
-# Create the RAG pipeline and try a query
+### Create the RAG pipeline and try a query
+
+```python
 from haystack.utils import Secret
 from haystack.components.embedders import SentenceTransformersTextEmbedder
 from haystack.components.builders import PromptBuilder

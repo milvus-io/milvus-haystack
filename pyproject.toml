@@ -28,7 +28,6 @@ dependencies = [
   "haystack-ai",
   "typing_extensions",
   "pymilvus",
-  "milvus",
 ]
 
 [project.urls]
@@ -177,7 +176,6 @@ module = [
   "milvus_haystack.*",
   "pymilvus.*",
   "numpy",
-  "milvus",
   "pytest.*"
 ]
 ignore_missing_imports = true
