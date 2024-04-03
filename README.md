@@ -15,7 +15,7 @@ First, to start up a Milvus service, follow
 the ['Start Milvus'](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus) instructions in the
 documentation.
 
-Then, to use the `MilvusDocumentStore` in a Haystack pipeline"
+Then, to use the `MilvusDocumentStore` in a Haystack pipeline
 
 ```python
 from haystack import Document
