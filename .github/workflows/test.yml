@@ -6,6 +6,7 @@ on:
       - "src/**"
       - "tests/**"
       - pyproject.toml
+      - .github/workflows/test.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -36,8 +37,8 @@ jobs:
 
       - name: Run Milvus
         run: |
-          wget https://github.com/milvus-io/milvus/releases/download/v2.4.0-rc.1/milvus-standalone-docker-compose.yml -O docker-compose.yml
-          sudo docker compose up -d
+          wget https://raw.githubusercontent.com/milvus-io/milvus/master/scripts/standalone_embed.sh
+          bash standalone_embed.sh start
           sleep 5
           echo "\nMilvus server started!"
 
@@ -46,5 +47,5 @@ jobs:
 
       - name: Stop and Remove Milvus
         run: |
-          sudo docker compose down
+          bash standalone_embed.sh stop
           echo "\nMilvus server stopped and removed!"
