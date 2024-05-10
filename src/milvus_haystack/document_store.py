@@ -409,9 +409,7 @@ class MilvusDocumentStore:
             elif uri.startswith("http://"):
                 given_address = uri.split("http://")[1]
             else:
-                err_msg = "Invalid Milvus URI: %s", uri
-                logger.error(err_msg)
-                raise ValueError(err_msg)
+                given_address = uri  # Milvus lite
         elif address is not None:
             given_address = address
         else:
