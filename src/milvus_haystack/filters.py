@@ -60,7 +60,7 @@ def _assert_comparison_filter(filters: Dict[str, Any]):
     assert "field" in filters, "field must be specified in filters"  # noqa: S101
     assert "value" in filters, "value must be specified in filters"  # noqa: S101
     assert filters["operator"] in COMPARISON_OPERATORS, FilterError(  # noqa: S101
-        "operator must be one of: %s" % LOGIC_OPERATORS
+        f"operator must be one of: {LOGIC_OPERATORS}"
     )
 
 
@@ -85,5 +85,5 @@ def _parse_logic(filters: Dict[str, Any]) -> str:
 def _assert_logic_filter(filters: Dict[str, Any]):
     assert "operator" in filters, "operator must be specified in filters"  # noqa: S101
     assert "conditions" in filters, "conditions must be specified in filters"  # noqa: S101
-    assert filters["operator"] in LOGIC_OPERATORS, "operator must be one of: %s" % LOGIC_OPERATORS  # noqa: S101
+    assert filters["operator"] in LOGIC_OPERATORS, f"operator must be one of: {LOGIC_OPERATORS}"  # noqa: S101
     assert isinstance(filters["conditions"], list), "conditions must be a list"  # noqa: S101
