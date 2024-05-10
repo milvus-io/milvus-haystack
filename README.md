@@ -5,35 +5,51 @@
 
 ## Installation
 
-```console
-pip install milvus-haystack
+```shell
+pip install --upgrade pymilvus milvus-haystack
 ```
 
 ## Usage
 
-First, to start up a Milvus service, follow
-the ['Start Milvus'](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus) instructions in the
-documentation.
+By default, if you install the latest version of pymilvus, you don't need to start the milvus service manually.
+Optionally, you
+can [start the Milvus service by docker](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus).
 
-Then, to use the `MilvusDocumentStore` in a Haystack pipeline
+Use the `MilvusDocumentStore` in a Haystack pipeline as a quick start.
 
 ```python
 from haystack import Document
 from milvus_haystack import MilvusDocumentStore
 
-document_store = MilvusDocumentStore()
+document_store = MilvusDocumentStore(
+    # If you have installed the latest version of pymilvus with milvus lite, you can use a local path as the uri without starting the milvus service.
+    connection_args={"uri": "./milvus.db"},
+    # Or, if you have started the milvus standalone service by docker, you can use the specified uri to connect to the service.
+    # connection_args={"uri": "http://localhost:19530"},
+    drop_old=True,
+)
 documents = [Document(
     content="A Foo Document",
     meta={"page": "100", "chapter": "intro"},
     embedding=[-10.0] * 128,
 )]
 document_store.write_documents(documents)
-document_store.count_documents()  # 1
+print(document_store.count_documents())  # 1
 ```
 
 ## Dive deep usage
 
-Here are the ways to build index, retrieval, and build rag pipeline respectively.
+Prepare an OpenAI API key and set it as an environment variable:
+
+```shell
+export OPENAI_API_KEY=<your_api_key>
+```
+
+Here are the ways to
+
+- Create the indexing Pipeline
+- Create the retrieval pipeline
+- Create the RAG pipeline
 
 ### Create the indexing Pipeline and index some documents
 
@@ -43,29 +59,27 @@ import os
 
 from haystack import Pipeline
 from haystack.components.converters import MarkdownToDocument
-from haystack.components.embedders import SentenceTransformersDocumentEmbedder, SentenceTransformersTextEmbedder
+from haystack.components.embedders import OpenAIDocumentEmbedder, OpenAITextEmbedder
 from haystack.components.preprocessors import DocumentSplitter
 from haystack.components.writers import DocumentWriter
 
 from milvus_haystack import MilvusDocumentStore
 from milvus_haystack.milvus_embedding_retriever import MilvusEmbeddingRetriever
 
-file_paths = glob.glob("./your_docs.md")
+current_file_path = os.path.abspath(__file__)
+file_paths = [current_file_path]  # You can replace it with your own file paths.
 
 document_store = MilvusDocumentStore(
-    connection_args={
-        "host": "localhost",
-        "port": "19530",
-        "user": "",
-        "password": "",
-        "secure": False,
-    },
+    # If you have installed the latest version of pymilvus with milvus lite, you can use a local path as the uri without starting the milvus service.
+    connection_args={"uri": "./milvus.db"},
+    # Or, if you have started the milvus standalone service by docker, you can use the specified uri to connect to the service.
+    # connection_args={"uri": "http://localhost:19530"},
     drop_old=True,
 )
 indexing_pipeline = Pipeline()
 indexing_pipeline.add_component("converter", MarkdownToDocument())
 indexing_pipeline.add_component("splitter", DocumentSplitter(split_by="sentence", split_length=2))
-indexing_pipeline.add_component("embedder", SentenceTransformersDocumentEmbedder())
+indexing_pipeline.add_component("embedder", OpenAIDocumentEmbedder())
 indexing_pipeline.add_component("writer", DocumentWriter(document_store))
 indexing_pipeline.connect("converter", "splitter")
 indexing_pipeline.connect("splitter", "embedder")
@@ -78,10 +92,10 @@ print("Number of documents:", document_store.count_documents())
 ### Create the retrieval pipeline and try a query
 
 ```python
-question = "What is Milvus?"
+question = "How to set the service uri with milvus lite?"  # You can replace it with your own question. 
 
 retrieval_pipeline = Pipeline()
-retrieval_pipeline.add_component("embedder", SentenceTransformersTextEmbedder())
+retrieval_pipeline.add_component("embedder", OpenAITextEmbedder())
 retrieval_pipeline.add_component("retriever", MilvusEmbeddingRetriever(document_store=document_store, top_k=3))
 retrieval_pipeline.connect("embedder", "retriever")
 
@@ -96,7 +110,6 @@ for doc in retrieval_results["retriever"]["documents"]:
 
 ```python
 from haystack.utils import Secret
-from haystack.components.embedders import SentenceTransformersTextEmbedder
 from haystack.components.builders import PromptBuilder
 from haystack.components.generators import OpenAIGenerator
 
@@ -111,7 +124,7 @@ prompt_template = """Answer the following query based on the provided context. I
                   """
 
 rag_pipeline = Pipeline()
-rag_pipeline.add_component("text_embedder", SentenceTransformersTextEmbedder())
+rag_pipeline.add_component("text_embedder", OpenAITextEmbedder())
 rag_pipeline.add_component("retriever", MilvusEmbeddingRetriever(document_store=document_store, top_k=3))
 rag_pipeline.add_component("prompt_builder", PromptBuilder(template=prompt_template))
 rag_pipeline.add_component("generator", OpenAIGenerator(api_key=Secret.from_token(os.getenv("OPENAI_API_KEY")),
