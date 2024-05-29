@@ -26,10 +26,11 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         )
 
     def test_write_documents(self, document_store: DocumentStore):
-        document_store.write_documents(
+        return_value = document_store.write_documents(
             [Document(content="test doc 1"), Document(content="test doc 2"), Document(content="test doc 3")]
         )
         assert document_store.count_documents() == 3
+        assert return_value == 3
 
     def test_delete_documents(self, document_store: DocumentStore):
         """
