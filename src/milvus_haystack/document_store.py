@@ -76,6 +76,9 @@ class MilvusDocumentStore:
 
         # Default search params when one is not provided.
         self.default_search_params = {
+            "GPU_IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
+            "GPU_IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
+            "GPU_CAGRA": {"metric_type": "L2", "params": {"itopk_size": 128}},
             "IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
             "IVF_SQ8": {"metric_type": "L2", "params": {"nprobe": 10}},
             "IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
@@ -323,6 +326,7 @@ class MilvusDocumentStore:
         total_count = len(vectors)
 
         batch_size = 1000
+        wrote_ids = []
         if not isinstance(self.col, Collection):
             raise MilvusException(message="Collection is not initialized")
         for i in range(0, total_count, batch_size):
@@ -334,12 +338,12 @@ class MilvusDocumentStore:
             try:
                 # res: Collection
                 res = self.col.insert(insert_list, timeout=None, **kwargs)
-                ids.extend(res.primary_keys)
+                wrote_ids.extend(res.primary_keys)
             except MilvusException as err:
                 logger.error("Failed to insert batch starting at entity: %s/%s", i, total_count)
                 raise err
         self.col.flush()
-        return len(ids)
+        return len(wrote_ids)
 
     def delete_documents(self, document_ids: List[str]) -> None:
         """
