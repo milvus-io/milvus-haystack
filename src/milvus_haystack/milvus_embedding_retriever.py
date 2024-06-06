@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from haystack import Document, component
+from haystack import DeserializationError, Document, component, default_from_dict, default_to_dict
 
 from milvus_haystack import MilvusDocumentStore
 
@@ -22,6 +22,32 @@ class MilvusEmbeddingRetriever:
         self.filters = filters
         self.top_k = top_k
         self.document_store = document_store
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Returns a dictionary representation of the retriever component.
+
+        :returns:
+            A dictionary representation of the retriever component.
+        """
+        return default_to_dict(self, document_store=self.document_store.to_dict(), filters=self.filters, top_k=self.top_k)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MilvusEmbeddingRetriever":
+        """
+        Creates a new retriever from a dictionary.
+
+        :param data: The dictionary to use to create the retriever.
+        :return: A new retriever.
+        """
+        init_params = data.get("init_parameters", {})
+        if "document_store" not in init_params:
+            raise DeserializationError("Missing 'document_store' in serialization data")
+        
+        docstore = MilvusDocumentStore.from_dict(init_params["document_store"])
+        data["init_parameters"]["document_store"] = docstore
+            
+        return default_from_dict(cls, data)
 
     @component.output_types(documents=List[Document])
     def run(self, query_embedding: List[float]) -> Dict[str, List[Document]]:
