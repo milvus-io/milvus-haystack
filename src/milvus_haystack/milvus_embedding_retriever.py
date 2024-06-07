@@ -30,7 +30,9 @@ class MilvusEmbeddingRetriever:
         :returns:
             A dictionary representation of the retriever component.
         """
-        return default_to_dict(self, document_store=self.document_store.to_dict(), filters=self.filters, top_k=self.top_k)
+        return default_to_dict(
+            self, document_store=self.document_store.to_dict(), filters=self.filters, top_k=self.top_k
+        )
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MilvusEmbeddingRetriever":
@@ -42,11 +44,12 @@ class MilvusEmbeddingRetriever:
         """
         init_params = data.get("init_parameters", {})
         if "document_store" not in init_params:
-            raise DeserializationError("Missing 'document_store' in serialization data")
-        
+            err_msg = "Missing 'document_store' in serialization data"
+            raise DeserializationError(err_msg)
+
         docstore = MilvusDocumentStore.from_dict(init_params["document_store"])
         data["init_parameters"]["document_store"] = docstore
-            
+
         return default_from_dict(cls, data)
 
     @component.output_types(documents=List[Document])
