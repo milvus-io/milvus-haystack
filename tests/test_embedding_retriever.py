@@ -8,18 +8,17 @@ from src.milvus_haystack.milvus_embedding_retriever import MilvusEmbeddingRetrie
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONNECTION_ARGS = {
+    "uri": "http://localhost:19530",
+    # "uri": "./milvus_test.db",  # This uri works for Milvus Lite
+}
+
 
 class TestMilvusEmbeddingTests:
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(
-            connection_args={
-                "host": "localhost",
-                "port": "19530",
-                "user": "",
-                "password": "",
-                "secure": False,
-            },
+            connection_args=DEFAULT_CONNECTION_ARGS,
             drop_old=True,
         )
 
@@ -52,7 +51,7 @@ class TestMilvusEmbeddingTests:
                 "collection_name": "HaystackCollection",
                 "collection_description": "",
                 "collection_properties": None,
-                "connection_args": {"host": "localhost", "port": "19530", "user": "", "password": "", "secure": False},
+                "connection_args": DEFAULT_CONNECTION_ARGS,
                 "consistency_level": "Session",
                 "index_params": None,
                 "search_params": None,
@@ -82,13 +81,7 @@ class TestMilvusEmbeddingTests:
                         "collection_name": "HaystackCollection",
                         "collection_description": "",
                         "collection_properties": None,
-                        "connection_args": {
-                            "host": "localhost",
-                            "port": "19530",
-                            "user": "",
-                            "password": "",
-                            "secure": False,
-                        },
+                        "connection_args": DEFAULT_CONNECTION_ARGS,
                         "consistency_level": "Session",
                         "index_params": None,
                         "search_params": None,
@@ -115,7 +108,7 @@ class TestMilvusEmbeddingTests:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__"):
+                    if doc_store_field.startswith("__") or doc_store_field == "alias":
                         continue
                     assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                         document_store, doc_store_field

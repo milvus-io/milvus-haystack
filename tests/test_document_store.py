@@ -10,18 +10,17 @@ from src.milvus_haystack import MilvusDocumentStore
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONNECTION_ARGS = {
+    "uri": "http://localhost:19530",
+    # "uri": "./milvus_test.db",  # This uri works for Milvus Lite
+}
+
 
 class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsTest):
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(
-            connection_args={
-                "host": "localhost",
-                "port": "19530",
-                "user": "",
-                "password": "",
-                "secure": False,
-            },
+            connection_args=DEFAULT_CONNECTION_ARGS,
             drop_old=True,
         )
 
@@ -61,7 +60,7 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
                 "collection_name": "HaystackCollection",
                 "collection_description": "",
                 "collection_properties": None,
-                "connection_args": {"host": "localhost", "port": "19530", "user": "", "password": "", "secure": False},
+                "connection_args": DEFAULT_CONNECTION_ARGS,
                 "consistency_level": "Session",
                 "index_params": None,
                 "search_params": None,
@@ -78,6 +77,6 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         assert document_store_dict == expected_dict
         reconstructed_document_store = MilvusDocumentStore.from_dict(document_store_dict)
         for field in vars(reconstructed_document_store):
-            if field.startswith("__"):
+            if field.startswith("__") or field == "alias":
                 continue
             assert getattr(reconstructed_document_store, field) == getattr(document_store, field)
