@@ -662,6 +662,7 @@ class MilvusDocumentStore:
         for res in result[0]:
             data = {x: res.entity.get(x) for x in output_fields}
             doc = self._parse_document(data)
+            doc.score = res.score
             docs.append(doc)
         return docs
 
