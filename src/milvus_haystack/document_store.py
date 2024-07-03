@@ -1,3 +1,4 @@
+import copy
 import logging
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
@@ -8,6 +9,7 @@ from haystack.dataclasses.sparse_embedding import SparseEmbedding
 from haystack.document_stores.errors import DocumentStoreError
 from haystack.document_stores.types import DuplicatePolicy
 from haystack.errors import FilterError
+from haystack.utils import Secret, deserialize_secrets_inplace
 from pymilvus import AnnSearchRequest, MilvusException, RRFRanker
 from pymilvus.client.abstract import BaseRanker
 
@@ -71,6 +73,30 @@ class MilvusDocumentStore:
             If set, will override collection existing properties.
             For example: {"collection.ttl.seconds": 60}.
         :param connection_args: The connection args used for this class comes in the form of a dict.
+        - For the case of [Milvus Lite](https://milvus.io/docs/milvus_lite.md),
+        the most convenient method, just set the uri as a local file.
+            Examples:
+                connection_args = {
+                    "uri": "./milvus.db"
+                }
+        - For the case of Milvus server on [docker or kubernetes](https://milvus.io/docs/quickstart.md),
+        it is recommended to use when you are dealing with large scale of data.
+            Examples:
+                connection_args = {
+                    "uri": "http://localhost:19530"
+                }
+        - For the case of [Zilliz Cloud](https://zilliz.com/cloud), the fully managed
+         cloud service for Milvus, adjust the uri and token, which correspond to the
+         [Public Endpoint and Api key](https://docs.zilliz.com/docs/on-zilliz-cloud-console#free-cluster-details)
+         in Zilliz Cloud.
+             Examples:
+                 connection_args = {
+                     "uri": "https://in03-ba4234asae.api.gcp-us-west1.zillizcloud.com",  # Public Endpoint
+                     "token": Secret.from_env_var("ZILLIZ_CLOUD_API_KEY"),  # API key.
+                     "secure": True
+                 }
+        If you use `token` or `password`, we recommend using the `Secret` class to load
+        the token from environment variable for security.
         :param consistency_level: The consistency level to use for a collection.
             Defaults to "Session".
         :param index_params: Which index params to use.
@@ -142,8 +168,8 @@ class MilvusDocumentStore:
 
         # Create the connection to the server
         if connection_args is None:
-            connection_args = DEFAULT_MILVUS_CONNECTION
-        self.alias = self._create_connection_alias(connection_args)
+            self.connection_args = DEFAULT_MILVUS_CONNECTION
+        self.alias = self._create_connection_alias(self.connection_args)
         self.col: Optional[Collection] = None
 
         # Grab the existing collection if it exists
@@ -416,11 +442,17 @@ class MilvusDocumentStore:
 
         :return: A dictionary representation of the document store.
         """
+        new_connection_args = {}
+        for conn_arg_key, conn_arg_value in self.connection_args.items():
+            if isinstance(conn_arg_value, Secret):
+                new_connection_args[conn_arg_key] = conn_arg_value.to_dict()
+            else:
+                new_connection_args[conn_arg_key] = conn_arg_value
         init_parameters = {
             "collection_name": self.collection_name,
             "collection_description": self.collection_description,
             "collection_properties": self.collection_properties,
-            "connection_args": self.connection_args,
+            "connection_args": new_connection_args,
             "consistency_level": self.consistency_level,
             "index_params": self.index_params,
             "search_params": self.search_params,
@@ -446,18 +478,24 @@ class MilvusDocumentStore:
         :param data: The dictionary to use to create the document store.
         :return: A new document store.
         """
+        for conn_arg_key, conn_arg_value in data["init_parameters"]["connection_args"].items():
+            if isinstance(conn_arg_value, dict) and "type" in conn_arg_value and conn_arg_value["type"] == "env_var":
+                deserialize_secrets_inplace(data["init_parameters"]["connection_args"], keys=[conn_arg_key])
         return default_from_dict(cls, data)
 
     def _create_connection_alias(self, connection_args: dict) -> str:
         """Create the connection to the Milvus server."""
         from pymilvus import MilvusException, connections
 
+        connection_args_cp = copy.deepcopy(connection_args)
         # Grab the connection arguments that are used for checking existing connection
-        host: str = connection_args.get("host", None)
-        port: Union[str, int] = connection_args.get("port", None)
-        address: str = connection_args.get("address", None)
-        uri: str = connection_args.get("uri", None)
-        user = connection_args.get("user", None)
+        host: str = connection_args_cp.get("host", None)
+        port: Union[str, int] = connection_args_cp.get("port", None)
+        address: str = connection_args_cp.get("address", None)
+        uri: str = connection_args_cp.get("uri", None)
+        user = connection_args_cp.get("user", None)
+        token: Union[str, Secret] = connection_args_cp.get("token", None)
+        password: Union[str, Secret] = connection_args_cp.get("password", None)
 
         # Order of use is host/port, uri, address
         if host is not None and port is not None:
@@ -497,8 +535,14 @@ class MilvusDocumentStore:
 
         # Generate a new connection if one doesn't exist
         alias = uuid4().hex
+        token = self._resolve_value(token)
+        password = self._resolve_value(password)
+        if token is not None:
+            connection_args_cp["token"] = token
+        if password is not None:
+            connection_args_cp["password"] = password
         try:
-            connections.connect(alias=alias, **connection_args)
+            connections.connect(alias=alias, **connection_args_cp)
             logger.debug("Created new connection using: %s", alias)
             return alias
         except MilvusException as err:
@@ -691,6 +735,19 @@ class MilvusDocumentStore:
                 replica_number=replica_number,
                 timeout=timeout,
             )
+
+    def _resolve_value(self, secret: Union[str, Secret]):
+        if isinstance(secret, Secret):
+            return secret.resolve_value()
+        if secret:
+            logger.warning(
+                "Some secret values are not encrypted. Please use `Secret` class to encrypt them. "
+                "The best way to implement it is to use `Secret.from_env` to load from environment variables. "
+                "For example:\n"
+                "from haystack.utils import Secret\n"
+                "token = Secret.from_env('YOUR_TOKEN_ENV_VAR_NAME')"
+            )
+        return secret
 
     def _embedding_retrieval(
         self, query_embedding: List[float], filters: Optional[Dict[str, Any]] = None, top_k: int = 10

@@ -11,10 +11,6 @@ pip install --upgrade pymilvus milvus-haystack
 
 ## Usage
 
-By default, if you install the latest version of pymilvus, you don't need to start the milvus service manually.
-Optionally, you
-can [start the Milvus service by docker](https://milvus.io/docs/install_standalone-docker.md#Start-Milvus).
-
 Use the `MilvusDocumentStore` in a Haystack pipeline as a quick start.
 
 ```python
@@ -22,10 +18,7 @@ from haystack import Document
 from milvus_haystack import MilvusDocumentStore
 
 document_store = MilvusDocumentStore(
-    # If you have installed the latest version of pymilvus with milvus lite, you can use a local path as the uri without starting the milvus service.
     connection_args={"uri": "./milvus.db"},
-    # Or, if you have started the milvus standalone service by docker, you can use the specified uri to connect to the service.
-    # connection_args={"uri": "http://localhost:19530"},
     drop_old=True,
 )
 documents = [Document(
@@ -36,6 +29,38 @@ documents = [Document(
 document_store.write_documents(documents)
 print(document_store.count_documents())  # 1
 ```
+### Different ways to connect to Milvus
+
+- For the case of [Milvus Lite](https://milvus.io/docs/milvus_lite.md), the most convenient method, just set the uri as a local file.
+```python
+document_store = MilvusDocumentStore(
+    connection_args={"uri": "./milvus.db"},
+    drop_old=True,
+)
+```
+                
+- For the case of Milvus server on [docker or kubernetes](https://milvus.io/docs/quickstart.md), it is recommended to use when you are dealing with large scale of data. After starting the Milvus service, you can use the specified uri to connect to the service.
+```python
+document_store = MilvusDocumentStore(
+    connection_args={"uri": "http://localhost:19530"},
+    drop_old=True,
+)
+```
+
+- For the case of [Zilliz Cloud](https://zilliz.com/cloud), the fully managed cloud service for Milvus, adjust the uri and token, which correspond to the [Public Endpoint and Api key](https://docs.zilliz.com/docs/on-zilliz-cloud-console#free-cluster-details) in Zilliz Cloud.
+```python
+from haystack.utils import Secret
+document_store = MilvusDocumentStore(
+    connection_args={
+        "uri": "https://in03-ba4234asae.api.gcp-us-west1.zillizcloud.com",  # Your Public Endpoint
+        "token": Secret.from_env_var("ZILLIZ_CLOUD_API_KEY"),  # API key, we recommend using the Secret class to load the token from env variable for security.
+        "secure": True
+    },
+    drop_old=True,
+)
+```
+
+
 
 ## Dive deep usage
 
@@ -44,12 +69,6 @@ Prepare an OpenAI API key and set it as an environment variable:
 ```shell
 export OPENAI_API_KEY=<your_api_key>
 ```
-
-Here are the ways to
-
-- Create the indexing Pipeline
-- Create the retrieval pipeline
-- Create the RAG pipeline
 
 ### Create the indexing Pipeline and index some documents
 
@@ -70,10 +89,7 @@ current_file_path = os.path.abspath(__file__)
 file_paths = [current_file_path]  # You can replace it with your own file paths.
 
 document_store = MilvusDocumentStore(
-    # If you have installed the latest version of pymilvus with milvus lite, you can use a local path as the uri without starting the milvus service.
     connection_args={"uri": "./milvus.db"},
-    # Or, if you have started the milvus standalone service by docker, you can use the specified uri to connect to the service.
-    # connection_args={"uri": "http://localhost:19530"},
     drop_old=True,
 )
 indexing_pipeline = Pipeline()
@@ -143,6 +159,121 @@ print('RAG answer:', results["generator"]["replies"][0])
 
 ```
 
+## Sparse Retrieval
+```python
+from haystack import Document, Pipeline
+from haystack.components.writers import DocumentWriter
+from haystack.document_stores.types import DuplicatePolicy
+from haystack_integrations.components.embedders.fastembed import (
+    FastembedSparseDocumentEmbedder,
+    FastembedSparseTextEmbedder,
+)
+
+from milvus_haystack import MilvusDocumentStore, MilvusSparseEmbeddingRetriever
+
+document_store = MilvusDocumentStore(
+    connection_args={"uri": "./milvus.db"},
+    sparse_vector_field="sparse_vector",  # Specify a name of the sparse vector field to enable sparse retrieval.
+    drop_old=True,
+)
+
+documents = [
+    Document(content="My name is Wolfgang and I live in Berlin"),
+    Document(content="I saw a black horse running"),
+    Document(content="Germany has many big cities"),
+    Document(content="fastembed is supported by and maintained by Milvus."),
+]
+
+sparse_document_embedder = FastembedSparseDocumentEmbedder()
+writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.OVERWRITE)
+
+indexing_pipeline = Pipeline()
+indexing_pipeline.add_component("sparse_document_embedder", sparse_document_embedder)
+indexing_pipeline.add_component("writer", writer)
+indexing_pipeline.connect("sparse_document_embedder", "writer")
+
+indexing_pipeline.run({"sparse_document_embedder": {"documents": documents}})
+
+query_pipeline = Pipeline()
+query_pipeline.add_component("sparse_text_embedder", FastembedSparseTextEmbedder())
+query_pipeline.add_component("sparse_retriever", MilvusSparseEmbeddingRetriever(document_store=document_store))
+query_pipeline.connect("sparse_text_embedder.sparse_embedding", "sparse_retriever.query_sparse_embedding")
+
+query = "Who supports fastembed?"
+
+result = query_pipeline.run({"sparse_text_embedder": {"text": query}})
+
+print(result["sparse_retriever"]["documents"][0])  # noqa: T201
+
+# Document(id=..., content: 'fastembed is supported by and maintained by Milvus.', sparse_embedding: vector with 48 non-zero elements)
+```
+
+## Hybrid Retrieval
+
+```python
+from haystack import Document, Pipeline
+from haystack.components.embedders import OpenAIDocumentEmbedder, OpenAITextEmbedder
+from haystack.components.writers import DocumentWriter
+from haystack.document_stores.types import DuplicatePolicy
+from haystack_integrations.components.embedders.fastembed import (
+    FastembedSparseDocumentEmbedder,
+    FastembedSparseTextEmbedder,
+)
+
+from milvus_haystack import MilvusDocumentStore, MilvusHybridRetriever
+
+document_store = MilvusDocumentStore(
+    connection_args={"uri": "./milvus.db"},
+    drop_old=True,
+    sparse_vector_field="sparse_vector",  # Specify a name of the sparse vector field to enable hybrid retrieval.
+)
+
+documents = [
+    Document(content="My name is Wolfgang and I live in Berlin"),
+    Document(content="I saw a black horse running"),
+    Document(content="Germany has many big cities"),
+    Document(content="fastembed is supported by and maintained by Milvus."),
+]
+
+writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.OVERWRITE)
+
+indexing_pipeline = Pipeline()
+indexing_pipeline.add_component("sparse_doc_embedder", FastembedSparseDocumentEmbedder())
+indexing_pipeline.add_component("dense_doc_embedder", OpenAIDocumentEmbedder())
+indexing_pipeline.add_component("writer", writer)
+indexing_pipeline.connect("sparse_doc_embedder", "dense_doc_embedder")
+indexing_pipeline.connect("dense_doc_embedder", "writer")
+
+indexing_pipeline.run({"sparse_doc_embedder": {"documents": documents}})
+
+querying_pipeline = Pipeline()
+querying_pipeline.add_component("sparse_text_embedder",
+                                FastembedSparseTextEmbedder(model="prithvida/Splade_PP_en_v1"))
+
+querying_pipeline.add_component("dense_text_embedder", OpenAITextEmbedder())
+querying_pipeline.add_component(
+    "retriever",
+    MilvusHybridRetriever(
+        document_store=document_store,
+        # reranker=WeightedRanker(0.5, 0.5),  # Default is RRFRanker()
+    )
+)
+
+querying_pipeline.connect("sparse_text_embedder.sparse_embedding", "retriever.query_sparse_embedding")
+querying_pipeline.connect("dense_text_embedder.embedding", "retriever.query_embedding")
+
+question = "Who supports fastembed?"
+
+results = querying_pipeline.run(
+    {"dense_text_embedder": {"text": question},
+     "sparse_text_embedder": {"text": question}}
+)
+
+print(results["retriever"]["documents"][0])
+
+# Document(id=..., content: 'fastembed is supported by and maintained by Milvus.', embedding: vector of size 1536, sparse_embedding: vector with 48 non-zero elements)
+
+```
 ## License
 
 `milvus-haystack` is distributed under the terms of the [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) license.
