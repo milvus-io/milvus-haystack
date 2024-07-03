@@ -1,5 +1,4 @@
 import logging
-import time
 
 import pytest
 from haystack import Document
@@ -21,6 +20,7 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(
             connection_args=DEFAULT_CONNECTION_ARGS,
+            consistency_level="Strong",
             drop_old=True,
         )
 
@@ -40,7 +40,6 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         assert document_store.count_documents() == 1
 
         document_store.delete_documents([doc.id])
-        time.sleep(1)
         assert document_store.count_documents() == 0
 
     @pytest.mark.skip(reason="Milvus does not currently check if entity primary keys are duplicates")
@@ -61,13 +60,16 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
                 "collection_description": "",
                 "collection_properties": None,
                 "connection_args": DEFAULT_CONNECTION_ARGS,
-                "consistency_level": "Session",
+                "consistency_level": "Strong",
                 "index_params": None,
                 "search_params": None,
                 "drop_old": True,
                 "primary_field": "id",
                 "text_field": "text",
                 "vector_field": "vector",
+                "sparse_vector_field": None,
+                "sparse_index_params": None,
+                "sparse_search_params": None,
                 "partition_key_field": None,
                 "partition_names": None,
                 "replica_number": 1,

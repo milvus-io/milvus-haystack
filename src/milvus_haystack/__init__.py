@@ -2,6 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 from .document_store import MilvusDocumentStore  # noqa: TID252
-from .milvus_embedding_retriever import MilvusEmbeddingRetriever  # noqa: TID252
+from .milvus_embedding_retriever import (  # noqa: TID252
+    MilvusEmbeddingRetriever,
+    MilvusHybridRetriever,
+    MilvusSparseEmbeddingRetriever,
+)
 
-__all__ = ["MilvusDocumentStore", "MilvusEmbeddingRetriever"]
+__all__ = ["MilvusDocumentStore", "MilvusEmbeddingRetriever", "MilvusSparseEmbeddingRetriever", "MilvusHybridRetriever"]

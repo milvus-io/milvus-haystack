@@ -10,6 +10,12 @@ from src.milvus_haystack import MilvusDocumentStore
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONNECTION_ARGS = {
+    "uri": "http://localhost:19530",
+    # "uri": "./milvus_test.db",  # This uri works for Milvus Lite
+    # Note: milvus lite may fail in some tests due to currently not supporting some expressions
+}
+
 
 class TestMilvusFilters(FilterDocumentsTest):
     @pytest.fixture
@@ -60,13 +66,8 @@ class TestMilvusFilters(FilterDocumentsTest):
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(
-            connection_args={
-                "host": "localhost",
-                "port": "19530",
-                "user": "",
-                "password": "",
-                "secure": False,
-            },
+            connection_args=DEFAULT_CONNECTION_ARGS,
+            consistency_level="Strong",
             drop_old=True,
         )
 
@@ -88,7 +89,9 @@ class TestMilvusFilters(FilterDocumentsTest):
             assert r.content_type == e.content_type
             assert r.blob == e.blob
             assert r.score == r.score
-            assert np.allclose(np.array(r.embedding), np.array(e.embedding), atol=1e-4)
+            if r.embedding is not None or e.embedding is not None:
+                assert np.allclose(np.array(r.embedding), np.array(e.embedding), atol=1e-4)
+            assert r.sparse_embedding == e.sparse_embedding
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with dataframe")
     def test_comparison_equal_with_dataframe(self, document_store, filterable_docs): ...
