@@ -1,8 +1,8 @@
-# Contributing to Haystack
+# Contributing to milvus-haystack
 
 ## Contribute code
 
-### Run code quality checks locally```
+### Run code quality checks locally
 
 Install and update your [ruff](https://github.com/astral-sh/ruff) and [hatch](https://github.com/pypa/hatch) to the latest versions.
 
