@@ -203,7 +203,7 @@ query = "Who supports fastembed?"
 
 result = query_pipeline.run({"sparse_text_embedder": {"text": query}})
 
-print(result["sparse_retriever"]["documents"][0])  # noqa: T201
+print(result["sparse_retriever"]["documents"][0])
 
 # Document(id=..., content: 'fastembed is supported by and maintained by Milvus.', sparse_embedding: vector with 48 non-zero elements)
 ```
