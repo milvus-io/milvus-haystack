@@ -77,6 +77,7 @@ class MilvusSparseEmbeddingRetriever:
     """
     A component for retrieving documents using sparse embeddings from a Milvus Document Store.
     """
+
     def __init__(self, document_store: MilvusDocumentStore, filters: Optional[Dict[str, Any]] = None, top_k: int = 10):
         """
         Initializes a new instance of the MilvusSparseEmbeddingRetriever.
@@ -139,12 +140,13 @@ class MilvusHybridRetriever:
     """
     A component for retrieving documents using hybrid search from a Milvus Document Store.
     """
+
     def __init__(
-            self,
-            document_store: MilvusDocumentStore,
-            filters: Optional[Dict[str, Any]] = None,
-            top_k: int = 10,
-            reranker: Optional[BaseRanker] = None,
+        self,
+        document_store: MilvusDocumentStore,
+        filters: Optional[Dict[str, Any]] = None,
+        top_k: int = 10,
+        reranker: Optional[BaseRanker] = None,
     ):
         """
         Initializes a new instance of the MilvusHybridRetriever.
@@ -197,9 +199,9 @@ class MilvusHybridRetriever:
             reranker_module = importlib.import_module(reranker_module_name)
             reranker_cls = getattr(reranker_module, reranker_class_name)
             reranker_data = {
-                    "type": reranker_type_str,
-                    "init_parameters": data["init_parameters"]["reranker"]["init_parameters"],
-                }
+                "type": reranker_type_str,
+                "init_parameters": data["init_parameters"]["reranker"]["init_parameters"],
+            }
             data["init_parameters"]["reranker"] = default_from_dict(
                 reranker_cls,
                 reranker_data,

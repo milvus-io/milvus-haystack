@@ -169,7 +169,7 @@ class MilvusDocumentStore:
         # Create the connection to the server
         if connection_args is None:
             self.connection_args = DEFAULT_MILVUS_CONNECTION
-        self.alias = self._create_connection_alias(self.connection_args)
+        self.alias = self._create_connection_alias(self.connection_args)  # type: ignore[arg-type]
         self.col: Optional[Collection] = None
 
         # Grab the existing collection if it exists
@@ -443,7 +443,7 @@ class MilvusDocumentStore:
         :return: A dictionary representation of the document store.
         """
         new_connection_args = {}
-        for conn_arg_key, conn_arg_value in self.connection_args.items():
+        for conn_arg_key, conn_arg_value in self.connection_args.items():  # type: ignore[union-attr]
             if isinstance(conn_arg_value, Secret):
                 new_connection_args[conn_arg_key] = conn_arg_value.to_dict()
             else:
@@ -780,7 +780,7 @@ class MilvusDocumentStore:
         return docs
 
     def _sparse_embedding_retrieval(
-            self, query_sparse_embedding: SparseEmbedding, filters: Optional[Dict[str, Any]] = None, top_k: int = 10
+        self, query_sparse_embedding: SparseEmbedding, filters: Optional[Dict[str, Any]] = None, top_k: int = 10
     ) -> List[Document]:
         """Sparse embedding retrieval"""
         if self.col is None:
@@ -821,12 +821,12 @@ class MilvusDocumentStore:
         return docs
 
     def _hybrid_retrieval(
-            self,
-            query_embedding: List[float],
-            query_sparse_embedding: SparseEmbedding,
-            filters: Optional[Dict[str, Any]] = None,
-            top_k: int = 10,
-            reranker: Optional[BaseRanker] = None,
+        self,
+        query_embedding: List[float],
+        query_sparse_embedding: SparseEmbedding,
+        filters: Optional[Dict[str, Any]] = None,
+        top_k: int = 10,
+        reranker: Optional[BaseRanker] = None,
     ) -> List[Document]:
         """Hybrid retrieval using both dense and sparse embeddings"""
         if self.col is None:
@@ -855,28 +855,17 @@ class MilvusDocumentStore:
         else:
             expr = parse_filters(filters)
 
-        dense_req = AnnSearchRequest(
-            [query_embedding],
-            self._vector_field,
-            self.search_params,
-            limit=top_k,
-            expr=expr
-        )
+        dense_req = AnnSearchRequest([query_embedding], self._vector_field, self.search_params, limit=top_k, expr=expr)
         sparse_req = AnnSearchRequest(
             [self._convert_sparse_to_dict(query_sparse_embedding)],
             self._sparse_vector_field,
             self.sparse_search_params,
             limit=top_k,
-            expr=expr
+            expr=expr,
         )
 
         # Search topK docs based on dense and sparse vectors and rerank.
-        res = self.col.hybrid_search(
-            [dense_req, sparse_req],
-            rerank=reranker,
-            limit=top_k,
-            output_fields=output_fields
-        )
+        res = self.col.hybrid_search([dense_req, sparse_req], rerank=reranker, limit=top_k, output_fields=output_fields)
         docs = self._parse_search_result(res, output_fields=output_fields)
         return docs
 
@@ -917,4 +906,3 @@ class MilvusDocumentStore:
 
     def _convert_dict_to_sparse(self, sparse_dict: Dict) -> SparseEmbedding:
         return SparseEmbedding(indices=list(sparse_dict.keys()), values=list(sparse_dict.values()))
-

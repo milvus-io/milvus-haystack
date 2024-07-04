@@ -141,7 +141,7 @@ class TestMilvusSparseEmbeddingTests:
             connection_args=DEFAULT_CONNECTION_ARGS,
             consistency_level="Strong",
             drop_old=True,
-            sparse_vector_field="sparse_vector"
+            sparse_vector_field="sparse_vector",
         )
 
     @pytest.fixture
@@ -157,7 +157,7 @@ class TestMilvusSparseEmbeddingTests:
                 "date": "1969-07-21T20:17:40",
             },
             embedding=[-10.0] * 128,
-            sparse_embedding=SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0])
+            sparse_embedding=SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0]),
         )
         documents.append(doc)
         return documents
@@ -294,7 +294,7 @@ class TestMilvusHybridTests:
                 "date": "1969-07-21T20:17:40",
             },
             embedding=[-10.0] * 128,
-            sparse_embedding=SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0])
+            sparse_embedding=SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0]),
         )
         documents.append(doc)
         return documents
@@ -394,10 +394,7 @@ class TestMilvusHybridTests:
                 },
                 "filters": None,
                 "top_k": 10,
-                "reranker": {
-                    "type": "pymilvus.client.abstract.RRFRanker",
-                    "init_parameters": {}
-                },
+                "reranker": {"type": "pymilvus.client.abstract.RRFRanker", "init_parameters": {}},
             },
         }
 
