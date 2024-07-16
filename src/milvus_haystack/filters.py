@@ -60,7 +60,7 @@ def _assert_comparison_filter(filters: Dict[str, Any]):
     assert "field" in filters, "field must be specified in filters"  # noqa: S101
     assert "value" in filters, "value must be specified in filters"  # noqa: S101
     assert filters["operator"] in COMPARISON_OPERATORS, FilterError(  # noqa: S101
-        f"operator must be one of: {LOGIC_OPERATORS}"
+        f"operator must be one of: {COMPARISON_OPERATORS}"
     )
 
 
