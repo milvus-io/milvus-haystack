@@ -420,7 +420,6 @@ class MilvusDocumentStore:
             except MilvusException as err:
                 logger.error("Failed to insert batch starting at entity: %s/%s", i, total_count)
                 raise err
-        self.col.flush()
         return len(wrote_ids)
 
     def delete_documents(self, document_ids: List[str]) -> None:
