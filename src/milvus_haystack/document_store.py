@@ -313,7 +313,7 @@ class MilvusDocumentStore:
 
         from pymilvus import Collection, MilvusException
 
-        documents_cp = deepcopy(documents)
+        documents_cp = [MilvusDocumentStore._discard_invalid_meta(doc) for doc in deepcopy(documents)]
         if len(documents_cp) > 0 and not isinstance(documents_cp[0], Document):
             err_msg = "param 'documents' must contain a list of objects of type Document"
             raise ValueError(err_msg)
@@ -905,3 +905,34 @@ class MilvusDocumentStore:
 
     def _convert_dict_to_sparse(self, sparse_dict: Dict) -> SparseEmbedding:
         return SparseEmbedding(indices=list(sparse_dict.keys()), values=list(sparse_dict.values()))
+
+    @staticmethod
+    def _discard_invalid_meta(document: Document):
+        """
+        Remove metadata fields with unsupported types from the document.
+        """
+        from pymilvus import DataType
+        from pymilvus.orm.types import infer_dtype_bydata
+
+        if not isinstance(document, Document):
+            msg = f"Invalid document type: {type(document)}"
+            raise ValueError(msg)
+        if document.meta:
+            discarded_keys = []
+            new_meta = {}
+            for key, value in document.meta.items():
+                dtype = infer_dtype_bydata(value)
+                if dtype in (DataType.UNKNOWN, DataType.NONE):
+                    discarded_keys.append(key)
+                else:
+                    new_meta[key] = value
+
+            if discarded_keys:
+                msg = (
+                    f"Document {document.id} has metadata fields with unsupported types: {discarded_keys}. "
+                    f"Supported types refer to Pymilvus DataType. The values of these fields will be discarded."
+                )
+                logger.warning(msg)
+            document.meta = new_meta
+
+        return document
