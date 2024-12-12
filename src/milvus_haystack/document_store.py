@@ -775,7 +775,8 @@ class MilvusDocumentStore:
             output_fields=output_fields,
             timeout=None,
         )
-        docs = self._parse_search_result(res, output_fields=output_fields)
+        distance_to_score_fn = self._select_score_fn()
+        docs = self._parse_search_result(res, output_fields=output_fields, distance_to_score_fn=distance_to_score_fn)
         return docs
 
     def _sparse_embedding_retrieval(
@@ -868,15 +869,45 @@ class MilvusDocumentStore:
         docs = self._parse_search_result(res, output_fields=output_fields)
         return docs
 
-    def _parse_search_result(self, result, output_fields=None) -> List[Document]:
+    def _parse_search_result(self, result, output_fields=None, distance_to_score_fn=lambda x: x) -> List[Document]:
         if output_fields is None:
             output_fields = self.fields[:]
         docs = []
         for res in result[0]:
             data = {x: res.entity.get(x) for x in output_fields}
             doc = self._parse_document(data)
+            doc.score = distance_to_score_fn(res.distance)
             docs.append(doc)
         return docs
+
+    def _select_score_fn(self):
+        def _map_l2_to_similarity(l2_distance: float) -> float:
+            """Return a similarity score on a scale [0, 1].
+            It is recommended that the original vector is normalized,
+            Milvus only calculates the value before applying square root.
+            l2_distance range: (0 is most similar, 4 most dissimilar)
+            See
+            https://milvus.io/docs/metric.md?tab=floating#Euclidean-distance-L2
+            """
+            return 1 - l2_distance / 4.0
+
+        def _map_ip_to_similarity(ip_score: float) -> float:
+            """Return a similarity score on a scale [0, 1].
+            It is recommended that the original vector is normalized,
+            ip_score range: (1 is most similar, -1 most dissimilar)
+            See
+            https://milvus.io/docs/metric.md?tab=floating#Inner-product-IP
+            https://milvus.io/docs/metric.md?tab=floating#Cosine-Similarity
+            """
+            return (ip_score + 1) / 2.0
+
+        metric_type = self.index_params.get("metric_type", None)
+        if metric_type == "L2":
+            return _map_l2_to_similarity
+        elif metric_type in ["IP", "COSINE"]:
+            return _map_ip_to_similarity
+        else:
+            return lambda x: x
 
     def _parse_document(self, data: dict) -> Document:
         # we store dummy vectors during writing documents if they are not provided,
