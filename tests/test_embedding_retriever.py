@@ -1,6 +1,7 @@
 import logging
 from typing import List
 
+import numpy as np
 import pytest
 from haystack import Document, default_to_dict
 from haystack.dataclasses.sparse_embedding import SparseEmbedding
@@ -17,9 +18,29 @@ from src.milvus_haystack.milvus_embedding_retriever import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONNECTION_ARGS = {
-    "uri": "http://localhost:19530",
-    # "uri": "./milvus_test.db",  # This uri works for Milvus Lite
+    # "uri": "http://localhost:19530",  # This uri works for Milvus docker service
+    "uri": "./milvus_test.db",  # This uri works for Milvus Lite
 }
+
+
+def l2_normalization(x: List[float]) -> List[float]:
+    v = np.array(x)
+    l2_norm = np.linalg.norm(v)
+    if l2_norm == 0:
+        return np.zeros_like(v)
+    normalized_v = v / l2_norm
+    return normalized_v.tolist()
+
+
+def assert_docs_equal_except_score(doc1: Document, doc2: Document):
+    from dataclasses import fields
+
+    field_names = [field.name for field in fields(Document) if field.name != "score"]
+
+    for field_name in field_names:
+        value1 = getattr(doc1, field_name)
+        value2 = getattr(doc2, field_name)
+        assert value1 == value2
 
 
 class TestMilvusEmbeddingTests:
@@ -33,25 +54,27 @@ class TestMilvusEmbeddingTests:
 
     def test_run(self, document_store: MilvusDocumentStore):
         documents = []
-        doc = Document(
-            content="A Foo Document",
-            meta={
-                "name": "name_0",
-                "page": "100",
-                "chapter": "intro",
-                "number": 2,
-                "date": "1969-07-21T20:17:40",
-            },
-            embedding=[-10.0] * 128,
-        )
-        documents.append(doc)
+        for i in range(10):
+            doc = Document(
+                content="A Foo Document",
+                meta={
+                    "name": f"name_{i}",
+                    "page": "100",
+                    "chapter": "intro",
+                    "number": 2,
+                    "date": "1969-07-21T20:17:40",
+                },
+                embedding=l2_normalization([0.5] * 63 + [0.1 * i]),
+            )
+            documents.append(doc)
         document_store.write_documents(documents)
         retriever = MilvusEmbeddingRetriever(
             document_store,
         )
-        query_embedding = [-10.0] * 128
+        query_embedding = l2_normalization([0.5] * 64)
         res = retriever.run(query_embedding)
-        assert res["documents"] == documents
+        assert len(res["documents"]) == 10
+        assert_docs_equal_except_score(res["documents"][0], documents[5])
 
     def test_to_dict(self, document_store: MilvusDocumentStore):
         expected_dict = {
@@ -147,19 +170,20 @@ class TestMilvusSparseEmbeddingTests:
     @pytest.fixture
     def documents(self) -> List[Document]:
         documents = []
-        doc = Document(
-            content="A Foo Document",
-            meta={
-                "name": "name_0",
-                "page": "100",
-                "chapter": "intro",
-                "number": 2,
-                "date": "1969-07-21T20:17:40",
-            },
-            embedding=[-10.0] * 128,
-            sparse_embedding=SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0]),
-        )
-        documents.append(doc)
+        for i in range(10):
+            doc = Document(
+                content="A Foo Document",
+                meta={
+                    "name": f"name_{i}",
+                    "page": "100",
+                    "chapter": "intro",
+                    "number": 2,
+                    "date": "1969-07-21T20:17:40",
+                },
+                embedding=l2_normalization([0.5] * 64),
+                sparse_embedding=SparseEmbedding(indices=[0, 1, 2 + i], values=[1.0, 2.0, 3.0]),
+            )
+            documents.append(doc)
         return documents
 
     def test_run(self, document_store: MilvusDocumentStore, documents: List[Document]):
@@ -167,9 +191,10 @@ class TestMilvusSparseEmbeddingTests:
         retriever = MilvusSparseEmbeddingRetriever(
             document_store,
         )
-        sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0])
+        sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2 + 5], values=[1.0, 2.0, 3.0])
         res = retriever.run(sparse_query_embedding)
-        assert res["documents"] == documents
+        assert len(res["documents"]) == 10
+        assert_docs_equal_except_score(res["documents"][0], documents[5])
 
     def test_fail_without_sparse_field(self, documents: List[Document]):
         document_store = MilvusDocumentStore(
@@ -284,19 +309,20 @@ class TestMilvusHybridTests:
     @pytest.fixture
     def documents(self) -> List[Document]:
         documents = []
-        doc = Document(
-            content="A Foo Document",
-            meta={
-                "name": "name_0",
-                "page": "100",
-                "chapter": "intro",
-                "number": 2,
-                "date": "1969-07-21T20:17:40",
-            },
-            embedding=[-10.0] * 128,
-            sparse_embedding=SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0]),
-        )
-        documents.append(doc)
+        for i in range(10):
+            doc = Document(
+                content="A Foo Document",
+                meta={
+                    "name": f"name_{i}",
+                    "page": "100",
+                    "chapter": "intro",
+                    "number": 2,
+                    "date": "1969-07-21T20:17:40",
+                },
+                embedding=l2_normalization([0.5] * 63 + [0.45 + 0.01 * i]),
+                sparse_embedding=SparseEmbedding(indices=[0, 1, 2 + i], values=[1.0, 2.0, 3.0]),
+            )
+            documents.append(doc)
         return documents
 
     def test_run(self, document_store: MilvusDocumentStore, documents: List[Document]):
@@ -304,13 +330,14 @@ class TestMilvusHybridTests:
         retriever = MilvusHybridRetriever(
             document_store,
         )
-        query_embedding = [-10.0] * 128
-        sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0])
+        query_embedding = l2_normalization([0.5] * 64)
+        sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2 + 5], values=[1.0, 2.0, 3.0])
         res = retriever.run(
             query_embedding=query_embedding,
             query_sparse_embedding=sparse_query_embedding,
         )
-        assert res["documents"] == documents
+        assert len(res["documents"]) == 10
+        assert_docs_equal_except_score(res["documents"][0], documents[5])
 
     def test_fail_without_sparse_field(self, documents: List[Document]):
         document_store = MilvusDocumentStore(
@@ -324,7 +351,7 @@ class TestMilvusHybridTests:
         retriever = MilvusHybridRetriever(
             document_store,
         )
-        query_embedding = [-10.0] * 128
+        query_embedding = l2_normalization([0.5] * 64)
         sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2], values=[1.0, 2.0, 3.0])
         with pytest.raises(MilvusStoreError):
             retriever.run(

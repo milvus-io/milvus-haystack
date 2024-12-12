@@ -11,7 +11,7 @@ from src.milvus_haystack import MilvusDocumentStore
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONNECTION_ARGS = {
-    "uri": "http://localhost:19530",
+    "uri": "http://localhost:19530",  # This uri works for Milvus docker service
     # "uri": "./milvus_test.db",  # This uri works for Milvus Lite
     # Note: milvus lite may fail in some tests due to currently not supporting some expressions
 }

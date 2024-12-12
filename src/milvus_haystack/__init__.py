@@ -8,4 +8,4 @@ from .milvus_embedding_retriever import (  # noqa: TID252
     MilvusSparseEmbeddingRetriever,
 )
 
-__all__ = ["MilvusDocumentStore", "MilvusEmbeddingRetriever", "MilvusSparseEmbeddingRetriever", "MilvusHybridRetriever"]
+__all__ = ["MilvusDocumentStore", "MilvusEmbeddingRetriever", "MilvusHybridRetriever", "MilvusSparseEmbeddingRetriever"]
