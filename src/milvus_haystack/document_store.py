@@ -901,6 +901,8 @@ class MilvusDocumentStore:
             """
             return (ip_score + 1) / 2.0
 
+        if not self.index_params:
+            return lambda x: x
         metric_type = self.index_params.get("metric_type", None)
         if metric_type == "L2":
             return _map_l2_to_similarity
