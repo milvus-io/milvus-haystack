@@ -79,6 +79,6 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         assert document_store_dict == expected_dict
         reconstructed_document_store = MilvusDocumentStore.from_dict(document_store_dict)
         for field in vars(reconstructed_document_store):
-            if field.startswith("__") or field == "alias":
+            if field.startswith("__") or field in ["alias", "_milvus_client"]:
                 continue
             assert getattr(reconstructed_document_store, field) == getattr(document_store, field)

@@ -148,7 +148,7 @@ class TestMilvusEmbeddingTests:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__") or doc_store_field == "alias":
+                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
                         continue
                     assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                         document_store, doc_store_field
@@ -286,7 +286,7 @@ class TestMilvusSparseEmbeddingTests:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__") or doc_store_field == "alias":
+                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
                         continue
                     assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                         document_store, doc_store_field
@@ -433,7 +433,7 @@ class TestMilvusHybridTests:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__") or doc_store_field == "alias":
+                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
                         continue
                     assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                         document_store, doc_store_field
