@@ -137,9 +137,7 @@ class MilvusDocumentStore:
         """
         # Default search params when one is not provided.
         self.default_search_params = {
-            "GPU_IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
-            "GPU_IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
-            "GPU_CAGRA": {"metric_type": "L2", "params": {"itopk_size": 128}},
+            "FLAT": {"metric_type": "L2", "params": {}},
             "IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
             "IVF_SQ8": {"metric_type": "L2", "params": {"nprobe": 10}},
             "IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
@@ -149,7 +147,16 @@ class MilvusDocumentStore:
             "RHNSW_PQ": {"metric_type": "L2", "params": {"ef": 10}},
             "IVF_HNSW": {"metric_type": "L2", "params": {"nprobe": 10, "ef": 10}},
             "ANNOY": {"metric_type": "L2", "params": {"search_k": 10}},
+            "SCANN": {"metric_type": "L2", "params": {"search_k": 10}},
             "AUTOINDEX": {"metric_type": "L2", "params": {}},
+            "GPU_CAGRA": {"metric_type": "L2", "params": {"itopk_size": 128}},
+            "GPU_IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
+            "GPU_IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
+            "SPARSE_INVERTED_INDEX": {
+                "metric_type": "IP",
+                "params": {"drop_ratio_build": 0.2},
+            },
+            "SPARSE_WAND": {"metric_type": "IP", "params": {"drop_ratio_build": 0.2}},
         }
 
         self.collection_name = collection_name
