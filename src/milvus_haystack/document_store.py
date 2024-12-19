@@ -16,6 +16,7 @@ from pymilvus import (
     CollectionSchema,
     DataType,
     FieldSchema,
+    MilvusClient,
     MilvusException,
     RRFRanker,
     connections,
@@ -175,6 +176,9 @@ class MilvusDocumentStore:
         # Create the connection to the server
         if connection_args is None:
             self.connection_args = DEFAULT_MILVUS_CONNECTION
+        self._milvus_client = MilvusClient(
+            **self.connection_args,
+        )
         self.alias = self._create_connection_alias(self.connection_args)  # type: ignore[arg-type]
         self.col: Optional[Collection] = None
 
@@ -198,6 +202,11 @@ class MilvusDocumentStore:
             timeout=timeout,
         )
         self._dummy_value = 999.0
+
+    @property
+    def client(self) -> MilvusClient:
+        """Get client."""
+        return self._milvus_client
 
     def count_documents(self) -> int:
         """
