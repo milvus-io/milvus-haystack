@@ -10,8 +10,21 @@ from haystack.document_stores.errors import DocumentStoreError
 from haystack.document_stores.types import DuplicatePolicy
 from haystack.errors import FilterError
 from haystack.utils import Secret, deserialize_secrets_inplace
-from pymilvus import AnnSearchRequest, MilvusException, RRFRanker
+from pymilvus import (
+    AnnSearchRequest,
+    Collection,
+    CollectionSchema,
+    DataType,
+    FieldSchema,
+    MilvusClient,
+    MilvusException,
+    RRFRanker,
+    connections,
+    utility,
+)
 from pymilvus.client.abstract import BaseRanker
+from pymilvus.client.types import LoadState
+from pymilvus.orm.types import infer_dtype_bydata
 
 from milvus_haystack.filters import parse_filters
 
@@ -122,17 +135,9 @@ class MilvusDocumentStore:
         :param replica_number: Number of replicas. Defaults to 1.
         :param timeout: Timeout in seconds. Defaults to None.
         """
-        try:
-            from pymilvus import Collection, utility
-        except ImportError as err:
-            err_msg = "Could not import pymilvus python package. Please install it with `pip install pymilvus`."
-            raise ValueError(err_msg) from err
-
         # Default search params when one is not provided.
         self.default_search_params = {
-            "GPU_IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
-            "GPU_IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
-            "GPU_CAGRA": {"metric_type": "L2", "params": {"itopk_size": 128}},
+            "FLAT": {"metric_type": "L2", "params": {}},
             "IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
             "IVF_SQ8": {"metric_type": "L2", "params": {"nprobe": 10}},
             "IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
@@ -142,7 +147,16 @@ class MilvusDocumentStore:
             "RHNSW_PQ": {"metric_type": "L2", "params": {"ef": 10}},
             "IVF_HNSW": {"metric_type": "L2", "params": {"nprobe": 10, "ef": 10}},
             "ANNOY": {"metric_type": "L2", "params": {"search_k": 10}},
+            "SCANN": {"metric_type": "L2", "params": {"search_k": 10}},
             "AUTOINDEX": {"metric_type": "L2", "params": {}},
+            "GPU_CAGRA": {"metric_type": "L2", "params": {"itopk_size": 128}},
+            "GPU_IVF_FLAT": {"metric_type": "L2", "params": {"nprobe": 10}},
+            "GPU_IVF_PQ": {"metric_type": "L2", "params": {"nprobe": 10}},
+            "SPARSE_INVERTED_INDEX": {
+                "metric_type": "IP",
+                "params": {"drop_ratio_build": 0.2},
+            },
+            "SPARSE_WAND": {"metric_type": "IP", "params": {"drop_ratio_build": 0.2}},
         }
 
         self.collection_name = collection_name
@@ -169,6 +183,9 @@ class MilvusDocumentStore:
         # Create the connection to the server
         if connection_args is None:
             self.connection_args = DEFAULT_MILVUS_CONNECTION
+        self._milvus_client = MilvusClient(
+            **self.connection_args,
+        )
         self.alias = self._create_connection_alias(self.connection_args)  # type: ignore[arg-type]
         self.col: Optional[Collection] = None
 
@@ -192,6 +209,11 @@ class MilvusDocumentStore:
             timeout=timeout,
         )
         self._dummy_value = 999.0
+
+    @property
+    def client(self) -> MilvusClient:
+        """Get client."""
+        return self._milvus_client
 
     def count_documents(self) -> int:
         """
@@ -310,8 +332,6 @@ class MilvusDocumentStore:
             MilvusStore only supports `DuplicatePolicy.NONE`
         :return: Number of documents written.
         """
-
-        from pymilvus import Collection, MilvusException
 
         documents_cp = [MilvusDocumentStore._discard_invalid_meta(doc) for doc in deepcopy(documents)]
         if len(documents_cp) > 0 and not isinstance(documents_cp[0], Document):
@@ -484,8 +504,6 @@ class MilvusDocumentStore:
 
     def _create_connection_alias(self, connection_args: dict) -> str:
         """Create the connection to the Milvus server."""
-        from pymilvus import MilvusException, connections
-
         connection_args_cp = copy.deepcopy(connection_args)
         # Grab the connection arguments that are used for checking existing connection
         host: str = connection_args_cp.get("host", None)
@@ -568,15 +586,6 @@ class MilvusDocumentStore:
         )
 
     def _create_collection(self, embeddings: list, metas: Optional[List[Dict]] = None) -> None:
-        from pymilvus import (
-            Collection,
-            CollectionSchema,
-            DataType,
-            FieldSchema,
-            MilvusException,
-        )
-        from pymilvus.orm.types import infer_dtype_bydata
-
         # Determine embedding dim
         dim = len(embeddings[0])
         fields = []
@@ -630,8 +639,6 @@ class MilvusDocumentStore:
 
     def _extract_fields(self) -> None:
         """Grab the existing fields from the Collection"""
-        from pymilvus import Collection
-
         if isinstance(self.col, Collection):
             schema = self.col.schema
             for x in schema.fields:
@@ -639,8 +646,6 @@ class MilvusDocumentStore:
 
     def _create_index(self) -> None:
         """Create an index on the collection"""
-        from pymilvus import Collection, MilvusException
-
         if isinstance(self.col, Collection) and self._get_index() is None:
             try:
                 # If no index params, use a default HNSW based one
@@ -694,8 +699,6 @@ class MilvusDocumentStore:
 
     def _create_search_params(self) -> None:
         """Generate search params based on the current index type"""
-        from pymilvus import Collection
-
         if isinstance(self.col, Collection) and self.search_params is None:
             index = self._get_index()
             if index is not None:
@@ -706,8 +709,6 @@ class MilvusDocumentStore:
 
     def _get_index(self) -> Optional[Dict[str, Any]]:
         """Return the vector index information if it exists"""
-        from pymilvus import Collection
-
         if isinstance(self.col, Collection):
             for x in self.col.indexes:
                 if x.field_name == self._vector_field:
@@ -721,9 +722,6 @@ class MilvusDocumentStore:
         timeout: Optional[float] = None,
     ) -> None:
         """Load the collection if available."""
-        from pymilvus import Collection, utility
-        from pymilvus.client.types import LoadState
-
         if (
             isinstance(self.col, Collection)
             and self._get_index() is not None
@@ -901,6 +899,8 @@ class MilvusDocumentStore:
             """
             return (ip_score + 1) / 2.0
 
+        if not self.index_params:
+            return lambda x: x
         metric_type = self.index_params.get("metric_type", None)
         if metric_type == "L2":
             return _map_l2_to_similarity
@@ -942,9 +942,6 @@ class MilvusDocumentStore:
         """
         Remove metadata fields with unsupported types from the document.
         """
-        from pymilvus import DataType
-        from pymilvus.orm.types import infer_dtype_bydata
-
         if not isinstance(document, Document):
             msg = f"Invalid document type: {type(document)}"
             raise ValueError(msg)
