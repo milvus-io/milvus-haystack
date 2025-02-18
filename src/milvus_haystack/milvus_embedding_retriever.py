@@ -209,7 +209,7 @@ class MilvusHybridRetriever:
         return default_from_dict(cls, data)
 
     @component.output_types(documents=List[Document])
-    def run(self, query_embedding: List[float], query_sparse_embedding: SparseEmbedding):
+    def run(self, query_embedding: List[float], query_sparse_embedding: SparseEmbedding, dynamicFilters: Optional[Dict[str, Any]] = None):
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense and sparse embeddings.
 
@@ -217,10 +217,15 @@ class MilvusHybridRetriever:
         :param query_sparse_embedding: Sparse Embedding of the query.
         :return: List of Document similar to `query_embedding`.
         """
+        
+        filters = self.filters
+        if dynamicFilters != None:
+            filters = dynamicFilters
+        
         docs = self.document_store._hybrid_retrieval(
             query_embedding=query_embedding,
             query_sparse_embedding=query_sparse_embedding,
-            filters=self.filters,
+            filters=filters,
             top_k=self.top_k,
             reranker=self.reranker,
         )
