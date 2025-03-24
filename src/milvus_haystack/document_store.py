@@ -1,4 +1,5 @@
 import copy
+import importlib
 import logging
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
@@ -27,6 +28,8 @@ from pymilvus.client.types import LoadState
 from pymilvus.orm.types import infer_dtype_bydata
 
 from milvus_haystack.filters import parse_filters
+from milvus_haystack.function import BaseMilvusBuiltInFunction, BM25BuiltInFunction
+from milvus_haystack.utils.constant import PRIMARY_FIELD, TEXT_FIELD, VECTOR_FIELD, EmbeddingMode
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +65,13 @@ class MilvusDocumentStore:
         search_params: Optional[dict] = None,
         drop_old: Optional[bool] = False,  # noqa: FBT002
         *,
-        primary_field: str = "id",
-        text_field: str = "text",
-        vector_field: str = "vector",
+        primary_field: str = PRIMARY_FIELD,
+        text_field: str = TEXT_FIELD,
+        vector_field: str = VECTOR_FIELD,
         sparse_vector_field: Optional[str] = None,
         sparse_index_params: Optional[dict] = None,
         sparse_search_params: Optional[dict] = None,
+        builtin_function: Optional[Union[BaseMilvusBuiltInFunction, List[BaseMilvusBuiltInFunction]]] = None,
         partition_key_field: Optional[str] = None,
         partition_names: Optional[list] = None,
         replica_number: int = 1,
@@ -130,6 +134,7 @@ class MilvusDocumentStore:
         :param sparse_search_params: Which search params to use for sparse field.
             Only useful when `sparse_vector_field` is set.
             If not specified, will use a default value.
+        :param builtin_function: A list of built-in functions to use.
         :param partition_key_field: Name of the partition key field. Defaults to None.
         :param partition_names: List of partition names. Defaults to None.
         :param replica_number: Number of replicas. Defaults to 1.
@@ -179,6 +184,12 @@ class MilvusDocumentStore:
         self.partition_names = partition_names
         self.replica_number = replica_number
         self.timeout = timeout
+        self.builtin_function: List[BaseMilvusBuiltInFunction] = []
+        if builtin_function:
+            self.builtin_function = (
+                [builtin_function] if isinstance(builtin_function, BaseMilvusBuiltInFunction) else builtin_function
+            )
+        self._check_function()
 
         # Create the connection to the server
         if connection_args is None:
@@ -209,6 +220,28 @@ class MilvusDocumentStore:
             timeout=timeout,
         )
         self._dummy_value = 999.0
+
+    def _check_function(self):
+        # In the future, we will support dense function after the Milvus's DIDO feature
+        # is ready.
+        # self._dense_mode = EmbeddingMode.EMBEDDING_MODEL
+        self._sparse_mode = EmbeddingMode.EMBEDDING_MODEL
+        # Check only one BM25BuiltInFunction in self.builtin_function
+        if len([function for function in self.builtin_function if isinstance(function, BM25BuiltInFunction)]) > 1:
+            error_msg = "Only one BM25BuiltInFunction is allowed"
+            raise MilvusStoreError(error_msg)
+        self._input_field_schema_kwargs = {}
+        for function in self.builtin_function:
+            # The `isinstance` check is not adapted to the unittest, so here we use the class name check.
+            if function.__class__.__name__ == BM25BuiltInFunction.__name__:
+                if self._text_field != function.input_field_names[0]:
+                    error_msg = "BM25BuiltInFunction input_field_names must be the same as text_field"
+                    raise MilvusStoreError(error_msg)
+                if self._sparse_vector_field != function.output_field_names[0]:
+                    error_msg = "BM25BuiltInFunction output_field_names must be the same as sparse_vector_field"
+                    raise MilvusStoreError(error_msg)
+                self._sparse_mode = EmbeddingMode.BUILTIN_FUNCTION
+                self._input_field_schema_kwargs = function.get_input_field_schema_kwargs()
 
     @property
     def client(self) -> MilvusClient:
@@ -302,7 +335,7 @@ class MilvusDocumentStore:
             logger.debug("No existing collection to filter.")
             return []
         # Determine result metadata fields.
-        output_fields = self.fields[:]
+        output_fields = self._get_output_fields()
 
         # Build expr.
         if not filters:
@@ -359,7 +392,7 @@ class MilvusDocumentStore:
                 empty_embedding = True
                 dummy_vector = [self._dummy_value] * embedding_dim
                 doc.embedding = dummy_vector
-            if doc.sparse_embedding is None:
+            if doc.sparse_embedding is None and self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL:
                 empty_sparse_embedding = True
                 dummy_sparse_vector = SparseEmbedding(
                     indices=[0],
@@ -374,7 +407,11 @@ class MilvusDocumentStore:
                 "A dummy embedding will be used, but this can AFFECT THE SEARCH RESULTS!!! "
                 "Please calculate the embedding in each document first, and then write them to Milvus Store."
             )
-        if empty_sparse_embedding and self._sparse_vector_field is not None:
+        if (
+            empty_sparse_embedding
+            and self._sparse_vector_field is not None
+            and self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL
+        ):
             logger.warning(
                 "You specified `sparse_vector_field`, but document has no sparse embedding. "
                 "A dummy sparse embedding will be used, but this can AFFECT THE SEARCH RESULTS!!! "
@@ -382,7 +419,9 @@ class MilvusDocumentStore:
             )
 
         embeddings = [doc.embedding for doc in documents_cp]
-        sparse_embeddings = [self._convert_sparse_to_dict(doc.sparse_embedding) for doc in documents_cp]
+        sparse_embeddings = None
+        if self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL:
+            sparse_embeddings = [self._convert_sparse_to_dict(doc.sparse_embedding) for doc in documents_cp]
         metas = [doc.meta for doc in documents_cp]
         texts = [doc.content for doc in documents_cp]
         ids = [doc.id for doc in documents_cp]
@@ -403,26 +442,26 @@ class MilvusDocumentStore:
                 kwargs["timeout"] = self.timeout
             self._init(**kwargs)
 
-        # Dict to hold all insert columns
-        insert_dict: Dict[str, List] = {
-            self._text_field: texts,
-            self._vector_field: embeddings,
-            self._primary_field: ids,
-        }
-        if self._sparse_vector_field:
-            insert_dict[self._sparse_vector_field] = sparse_embeddings
-
-        # Collect the meta into the insert dict.
-        if metas is not None:
-            for d in metas:
-                for key, value in d.items():
+        insert_list: list[dict] = []
+        for i in range(len(ids)):
+            entity_dict = {
+                self._text_field: texts[i],
+                self._vector_field: embeddings[i],
+                self._primary_field: ids[i],
+            }
+            if (
+                self._sparse_vector_field
+                and self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL
+                and sparse_embeddings is not None
+            ):
+                entity_dict[self._sparse_vector_field] = sparse_embeddings[i]
+            if metas is not None:
+                for key, value in metas[i].items():
                     if key in self.fields:
-                        insert_dict.setdefault(key, []).append(value)
+                        entity_dict[key] = value
+            insert_list.append(entity_dict)
 
-        # Total insert count
-        vectors: list = insert_dict[self._vector_field]
-        total_count = len(vectors)
-
+        total_count = len(insert_list)
         batch_size = 1000
         wrote_ids = []
         if not isinstance(self.col, Collection):
@@ -430,12 +469,11 @@ class MilvusDocumentStore:
         for i in range(0, total_count, batch_size):
             # Grab end index
             end = min(i + batch_size, total_count)
-            # Convert dict to list of lists batch for insertion
-            insert_list = [insert_dict[x][i:end] for x in self.fields]
+            batch_insert_list = insert_list[i:end]
             # Insert into the collection.
             try:
                 # res: Collection
-                res = self.col.insert(insert_list, timeout=None, **kwargs)
+                res = self.col.insert(batch_insert_list, timeout=None, **kwargs)
                 wrote_ids.extend(res.primary_keys)
             except MilvusException as err:
                 logger.error("Failed to insert batch starting at entity: %s/%s", i, total_count)
@@ -482,6 +520,7 @@ class MilvusDocumentStore:
             "sparse_vector_field": self._sparse_vector_field,
             "sparse_index_params": self.sparse_index_params,
             "sparse_search_params": self.sparse_search_params,
+            "builtin_function": [func.to_dict() for func in self.builtin_function],
             "partition_key_field": self._partition_key_field,
             "partition_names": self.partition_names,
             "replica_number": self.replica_number,
@@ -500,6 +539,24 @@ class MilvusDocumentStore:
         for conn_arg_key, conn_arg_value in data["init_parameters"]["connection_args"].items():
             if isinstance(conn_arg_value, dict) and "type" in conn_arg_value and conn_arg_value["type"] == "env_var":
                 deserialize_secrets_inplace(data["init_parameters"]["connection_args"], keys=[conn_arg_key])
+
+        if "builtin_function" in data["init_parameters"]:
+            builtin_function = []
+            for func_init_dict in data["init_parameters"]["builtin_function"]:
+                func_type = func_init_dict["type"]
+                func_params = func_init_dict["init_parameters"]
+
+                # Import the function class dynamically
+                module_name, class_name = func_type.rsplit(".", 1)
+                module = importlib.import_module(module_name)
+                func_class = getattr(module, class_name)
+
+                # Instantiate the function with parameters
+                func_instance = func_class(**func_params)
+                builtin_function.append(func_instance)
+
+            data["init_parameters"]["builtin_function"] = builtin_function
+
         return default_from_dict(cls, data)
 
     def _create_connection_alias(self, connection_args: dict) -> str:
@@ -607,7 +664,9 @@ class MilvusDocumentStore:
                     fields.append(FieldSchema(key, dtype))
 
         # Create the text field
-        fields.append(FieldSchema(self._text_field, DataType.VARCHAR, max_length=65_535))
+        fields.append(
+            FieldSchema(self._text_field, DataType.VARCHAR, max_length=65_535, **self._input_field_schema_kwargs)
+        )
         # Create the primary key field
         fields.append(FieldSchema(self._primary_field, DataType.VARCHAR, is_primary=True, max_length=65_535))
         # Create the vector field, supports binary or float vectors
@@ -620,6 +679,7 @@ class MilvusDocumentStore:
             fields,
             description=self.collection_description,
             partition_key_field=self._partition_key_field,
+            functions=[func.function for func in self.builtin_function],
         )
 
         # Create the collection
@@ -652,7 +712,7 @@ class MilvusDocumentStore:
                 if self.index_params is None:
                     self.index_params = {
                         "metric_type": "L2",
-                        "index_type": "HNSW",
+                        "index_type": "HNSW",  # todo: change to AUTOINDEX
                         "params": {"M": 8, "efConstruction": 64},
                     }
 
@@ -678,10 +738,17 @@ class MilvusDocumentStore:
                     )
                 if self._sparse_vector_field:
                     if self.sparse_index_params is None:
-                        self.sparse_index_params = {
-                            "index_type": "SPARSE_INVERTED_INDEX",
-                            "metric_type": "IP",
-                        }
+                        if self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL:
+                            self.sparse_index_params = {
+                                "index_type": "SPARSE_INVERTED_INDEX",
+                                "metric_type": "IP",
+                            }
+                        else:  # self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION:
+                            self.sparse_index_params = {
+                                "index_type": "AUTOINDEX",
+                                "metric_type": "BM25",
+                                "params": {},
+                            }
                     self.col.create_index(
                         self._sparse_vector_field,
                         index_params=self.sparse_index_params,
@@ -704,7 +771,7 @@ class MilvusDocumentStore:
             if index is not None:
                 index_type: str = index["index_param"]["index_type"]
                 metric_type: str = index["index_param"]["metric_type"]
-                self.search_params = self.default_search_params[index_type]
+                self.search_params = self.default_search_params[index_type]  # {"metric_type": "L2", "params": {}}
                 self.search_params["metric_type"] = metric_type
 
     def _get_index(self) -> Optional[Dict[str, Any]]:
@@ -747,7 +814,11 @@ class MilvusDocumentStore:
         return secret
 
     def _embedding_retrieval(
-        self, query_embedding: List[float], filters: Optional[Dict[str, Any]] = None, top_k: int = 10
+        self,
+        query_embedding: List[float],
+        filters: Optional[Dict[str, Any]] = None,
+        top_k: int = 10,
+        query_text: Optional[str] = None,
     ) -> List[Document]:
         """Dense embedding retrieval"""
         if self.col is None:
@@ -755,7 +826,7 @@ class MilvusDocumentStore:
             return []
 
         # Determine result metadata fields.
-        output_fields = self.fields[:]
+        output_fields = self._get_output_fields()
 
         # Build expr.
         if not filters:
@@ -764,8 +835,11 @@ class MilvusDocumentStore:
             expr = parse_filters(filters)
 
         # Perform the search.
+        search_data = self._prepare_search_data(
+            query_text=query_text, query_embedding=query_embedding, field=self._vector_field
+        )
         res = self.col.search(
-            data=[query_embedding],
+            data=[search_data],
             anns_field=self._vector_field,
             param=self.search_params,
             limit=top_k,
@@ -778,7 +852,11 @@ class MilvusDocumentStore:
         return docs
 
     def _sparse_embedding_retrieval(
-        self, query_sparse_embedding: SparseEmbedding, filters: Optional[Dict[str, Any]] = None, top_k: int = 10
+        self,
+        query_sparse_embedding: SparseEmbedding,
+        filters: Optional[Dict[str, Any]] = None,
+        top_k: int = 10,
+        query_text: Optional[str] = None,
     ) -> List[Document]:
         """Sparse embedding retrieval"""
         if self.col is None:
@@ -793,10 +871,13 @@ class MilvusDocumentStore:
             raise MilvusStoreError(message)
 
         if self.sparse_search_params is None:
-            self.sparse_search_params = {"metric_type": "IP"}
+            if self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL:
+                self.sparse_search_params = {"metric_type": "IP"}
+            else:  # self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION
+                self.sparse_search_params = {"metric_type": "BM25"}
 
         # Determine result metadata fields.
-        output_fields = self.fields[:]
+        output_fields = self._get_output_fields()
 
         # Build expr.
         if not filters:
@@ -805,7 +886,10 @@ class MilvusDocumentStore:
             expr = parse_filters(filters)
 
         # Perform the search.
-        search_data = self._convert_sparse_to_dict(query_sparse_embedding)
+        search_data = self._prepare_search_data(
+            query_text=query_text, query_embedding=query_sparse_embedding, field=self._sparse_vector_field
+        )
+
         res = self.col.search(
             data=[search_data],
             anns_field=self._sparse_vector_field,
@@ -821,10 +905,11 @@ class MilvusDocumentStore:
     def _hybrid_retrieval(
         self,
         query_embedding: List[float],
-        query_sparse_embedding: SparseEmbedding,
+        query_sparse_embedding: Optional[SparseEmbedding] = None,
         filters: Optional[Dict[str, Any]] = None,
         top_k: int = 10,
         reranker: Optional[BaseRanker] = None,
+        query_text: Optional[str] = None,
     ) -> List[Document]:
         """Hybrid retrieval using both dense and sparse embeddings"""
         if self.col is None:
@@ -842,10 +927,13 @@ class MilvusDocumentStore:
             reranker = RRFRanker()
 
         if self.sparse_search_params is None:
-            self.sparse_search_params = {"metric_type": "IP"}
+            if self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL:
+                self.sparse_search_params = {"metric_type": "IP"}
+            else:  # self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION
+                self.sparse_search_params = {"metric_type": "BM25"}
 
         # Determine result metadata fields.
-        output_fields = self.fields[:]
+        output_fields = self._get_output_fields()
 
         # Build expr.
         if not filters:
@@ -853,9 +941,17 @@ class MilvusDocumentStore:
         else:
             expr = parse_filters(filters)
 
-        dense_req = AnnSearchRequest([query_embedding], self._vector_field, self.search_params, limit=top_k, expr=expr)
+        dense_search_data = self._prepare_search_data(
+            query_text=query_text, query_embedding=query_embedding, field=self._vector_field
+        )
+        sparse_search_data = self._prepare_search_data(
+            query_text=query_text, query_embedding=query_sparse_embedding, field=self._sparse_vector_field
+        )
+        dense_req = AnnSearchRequest(
+            [dense_search_data], self._vector_field, self.search_params, limit=top_k, expr=expr
+        )
         sparse_req = AnnSearchRequest(
-            [self._convert_sparse_to_dict(query_sparse_embedding)],
+            [sparse_search_data],
             self._sparse_vector_field,
             self.sparse_search_params,
             limit=top_k,
@@ -869,7 +965,7 @@ class MilvusDocumentStore:
 
     def _parse_search_result(self, result, output_fields=None, distance_to_score_fn=lambda x: x) -> List[Document]:
         if output_fields is None:
-            output_fields = self.fields[:]
+            output_fields = self._get_output_fields()
         docs = []
         for res in result[0]:
             data = {x: res.entity.get(x) for x in output_fields}
@@ -964,3 +1060,27 @@ class MilvusDocumentStore:
             document.meta = new_meta
 
         return document
+
+    def _prepare_search_data(
+        self,
+        *,
+        query_text: Optional[str],
+        query_embedding: Optional[Union[List[float], SparseEmbedding]],
+        field: Optional[str],
+    ) -> Union[List[float], Dict, str]:
+        search_data: Union[str, List[float], SparseEmbedding] = query_embedding
+        if self._sparse_vector_field is not None and field == self._sparse_vector_field:
+            if self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION:
+                search_data = query_text
+            else:  # self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL
+                if not isinstance(query_embedding, SparseEmbedding):
+                    error_msg = "Query embedding must be a SparseEmbedding instance"
+                    raise MilvusStoreError(error_msg)
+                search_data = self._convert_sparse_to_dict(query_embedding)
+        return search_data
+
+    def _get_output_fields(self):
+        output_fields = self.fields[:]
+        if self._sparse_vector_field and self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION:
+            output_fields.remove(self._sparse_vector_field)
+        return output_fields
