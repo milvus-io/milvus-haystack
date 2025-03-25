@@ -68,6 +68,7 @@ class MilvusDocumentStore:
         primary_field: str = PRIMARY_FIELD,
         text_field: str = TEXT_FIELD,
         vector_field: str = VECTOR_FIELD,
+        enable_dynamic_field: bool = True,
         sparse_vector_field: Optional[str] = None,
         sparse_index_params: Optional[dict] = None,
         sparse_search_params: Optional[dict] = None,
@@ -123,6 +124,9 @@ class MilvusDocumentStore:
         :param primary_field: Name of the primary key field. Defaults to "id".
         :param text_field: Name of the text field. Defaults to "text".
         :param vector_field: Name of the vector field. Defaults to "vector".
+        :param enable_dynamic_field: Whether to enable dynamic field. Defaults to True.
+            For more information about Milvus dynamic field,
+            please refer to https://milvus.io/docs/enable-dynamic-field.md#Dynamic-Field
         :param sparse_vector_field: Name of the sparse vector field. Defaults to None,
             which means do not use sparse retrival,
             else enable sparse retrieval with this specified field.
@@ -176,6 +180,7 @@ class MilvusDocumentStore:
         self._primary_field = primary_field
         self._text_field = text_field
         self._vector_field = vector_field
+        self.enable_dynamic_field = enable_dynamic_field
         self._sparse_vector_field = sparse_vector_field
         self.sparse_index_params = sparse_index_params
         self.sparse_search_params = sparse_search_params
@@ -456,7 +461,13 @@ class MilvusDocumentStore:
                 entity_dict[self._sparse_vector_field] = sparse_embeddings[i]
             if metas is not None:
                 for key, value in metas[i].items():
-                    if key in self.fields:
+                    if self.enable_dynamic_field:
+                        entity_dict[key] = value
+                        # The `self.fields` is used to check the filtering expression
+                        # when the `enable_dynamic_field` is True.
+                        if key not in self.fields:
+                            self.fields.append(key)
+                    elif key in self.fields:
                         entity_dict[key] = value
             insert_list.append(entity_dict)
 
@@ -645,8 +656,8 @@ class MilvusDocumentStore:
         # Determine embedding dim
         dim = len(embeddings[0])
         fields = []
-        # Determine meta schema
-        if metas:
+        if not self.enable_dynamic_field and metas:
+            # Determine meta schema
             # Create FieldSchema for each entry in meta.
             for key, value in metas[0].items():
                 # Infer the corresponding datatype of the meta
@@ -678,6 +689,7 @@ class MilvusDocumentStore:
             fields,
             description=self.collection_description,
             partition_key_field=self._partition_key_field,
+            enable_dynamic_field=self.enable_dynamic_field,
             functions=[func.function for func in self.builtin_function],
         )
 
