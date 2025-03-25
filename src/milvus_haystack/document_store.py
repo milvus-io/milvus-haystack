@@ -334,7 +334,6 @@ class MilvusDocumentStore:
         if self.col is None:
             logger.debug("No existing collection to filter.")
             return []
-        # Determine result metadata fields.
         output_fields = self._get_output_fields()
 
         # Build expr.
@@ -708,12 +707,12 @@ class MilvusDocumentStore:
         """Create an index on the collection"""
         if isinstance(self.col, Collection) and self._get_index() is None:
             try:
-                # If no index params, use a default HNSW based one
+                # If no index params, use a default AUTOINDEX based one
                 if self.index_params is None:
                     self.index_params = {
                         "metric_type": "L2",
-                        "index_type": "HNSW",  # todo: change to AUTOINDEX
-                        "params": {"M": 8, "efConstruction": 64},
+                        "index_type": "AUTOINDEX",
+                        "params": {},
                     }
 
                 try:
@@ -825,7 +824,6 @@ class MilvusDocumentStore:
             logger.debug("No existing collection to search.")
             return []
 
-        # Determine result metadata fields.
         output_fields = self._get_output_fields()
 
         # Build expr.
@@ -876,7 +874,6 @@ class MilvusDocumentStore:
             else:  # self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION
                 self.sparse_search_params = {"metric_type": "BM25"}
 
-        # Determine result metadata fields.
         output_fields = self._get_output_fields()
 
         # Build expr.
@@ -932,7 +929,6 @@ class MilvusDocumentStore:
             else:  # self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION
                 self.sparse_search_params = {"metric_type": "BM25"}
 
-        # Determine result metadata fields.
         output_fields = self._get_output_fields()
 
         # Build expr.
