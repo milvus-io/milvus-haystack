@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
   "haystack-ai",
   "typing_extensions",
-  "pymilvus>=2.5.6",
+  "pymilvus<=2.5.4",  #There is an issue in pymilvus 2.5.5 and 2.5.6, so we need to pin it to 2.5.4.
 ]
 
 [project.urls]
