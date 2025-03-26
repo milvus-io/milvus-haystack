@@ -1,9 +1,7 @@
-import copy
 import importlib
 import logging
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
-from uuid import uuid4
 
 from haystack import Document, default_from_dict, default_to_dict
 from haystack.dataclasses.sparse_embedding import SparseEmbedding
@@ -20,7 +18,6 @@ from pymilvus import (
     MilvusClient,
     MilvusException,
     RRFRanker,
-    connections,
     utility,
 )
 from pymilvus.client.abstract import BaseRanker
@@ -202,7 +199,7 @@ class MilvusDocumentStore:
         self._milvus_client = MilvusClient(
             **self.connection_args,
         )
-        self.alias = self._create_connection_alias(self.connection_args)  # type: ignore[arg-type]
+        self.alias = self.client._using
         self.col: Optional[Collection] = None
 
         # Grab the existing collection if it exists
@@ -568,70 +565,6 @@ class MilvusDocumentStore:
             data["init_parameters"]["builtin_function"] = builtin_function
 
         return default_from_dict(cls, data)
-
-    def _create_connection_alias(self, connection_args: dict) -> str:
-        """Create the connection to the Milvus server."""
-        connection_args_cp = copy.deepcopy(connection_args)
-        # Grab the connection arguments that are used for checking existing connection
-        host: str = connection_args_cp.get("host", None)
-        port: Union[str, int] = connection_args_cp.get("port", None)
-        address: str = connection_args_cp.get("address", None)
-        uri: str = connection_args_cp.get("uri", None)
-        user = connection_args_cp.get("user", None)
-        token: Union[str, Secret] = connection_args_cp.get("token", None)
-        password: Union[str, Secret] = connection_args_cp.get("password", None)
-
-        # Order of use is host/port, uri, address
-        if host is not None and port is not None:
-            given_address = str(host) + ":" + str(port)
-        elif uri is not None:
-            if uri.startswith("https://"):
-                given_address = uri.split("https://")[1]
-            elif uri.startswith("http://"):
-                given_address = uri.split("http://")[1]
-            else:
-                given_address = uri  # Milvus lite
-        elif address is not None:
-            given_address = address
-        else:
-            given_address = None
-            logger.debug("Missing standard address type for reuse attempt")
-
-        # User defaults to empty string when getting connection info
-        if user is not None:
-            tmp_user = user
-        else:
-            tmp_user = ""
-
-        # If a valid address was given, then check if a connection exists
-        if given_address is not None:
-            for con in connections.list_connections():
-                addr = connections.get_connection_addr(con[0])
-                if (
-                    con[1]
-                    and ("address" in addr)
-                    and (addr["address"] == given_address)
-                    and ("user" in addr)
-                    and (addr["user"] == tmp_user)
-                ):
-                    logger.debug("Using previous connection: %s", con[0])
-                    return con[0]
-
-        # Generate a new connection if one doesn't exist
-        alias = uuid4().hex
-        token = self._resolve_value(token)
-        password = self._resolve_value(password)
-        if token is not None:
-            connection_args_cp["token"] = token
-        if password is not None:
-            connection_args_cp["password"] = password
-        try:
-            connections.connect(alias=alias, **connection_args_cp)
-            logger.debug("Created new connection using: %s", alias)
-            return alias
-        except MilvusException as err:
-            logger.error("Failed to create new connection using: %s", alias)
-            raise err
 
     def _init(
         self,
