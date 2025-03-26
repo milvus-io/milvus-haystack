@@ -9,6 +9,7 @@ from pymilvus import RRFRanker
 
 from src.milvus_haystack import MilvusDocumentStore
 from src.milvus_haystack.document_store import MilvusStoreError
+from src.milvus_haystack.function import BM25BuiltInFunction
 from src.milvus_haystack.milvus_embedding_retriever import (
     MilvusEmbeddingRetriever,
     MilvusHybridRetriever,
@@ -18,8 +19,8 @@ from src.milvus_haystack.milvus_embedding_retriever import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONNECTION_ARGS = {
-    # "uri": "http://localhost:19530",  # This uri works for Milvus docker service
-    "uri": "./milvus_test.db",  # This uri works for Milvus Lite
+    "uri": "http://localhost:19530",  # This uri works for Milvus docker service
+    # "uri": "./milvus_test.db",  # This uri works for Milvus Lite
 }
 
 
@@ -94,6 +95,7 @@ class TestMilvusEmbeddingTests:
                 "sparse_vector_field": None,
                 "sparse_index_params": None,
                 "sparse_search_params": None,
+                "builtin_function": [],
                 "partition_key_field": None,
                 "partition_names": None,
                 "replica_number": 1,
@@ -129,6 +131,7 @@ class TestMilvusEmbeddingTests:
                         "sparse_vector_field": None,
                         "sparse_index_params": None,
                         "sparse_search_params": None,
+                        "builtin_function": [],
                         "partition_key_field": None,
                         "partition_names": None,
                         "replica_number": 1,
@@ -150,9 +153,19 @@ class TestMilvusEmbeddingTests:
                 for doc_store_field in vars(document_store):
                     if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
                         continue
-                    assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
-                        document_store, doc_store_field
-                    )
+                    if doc_store_field == "builtin_function":
+                        for func, func_reconstructed in zip(
+                            getattr(document_store, doc_store_field),
+                            getattr(reconstructed_retriever.document_store, doc_store_field),
+                        ):
+                            for k, v in func.to_dict().items():
+                                if k == "function_name":
+                                    continue
+                                assert v == func_reconstructed.to_dict()[k]
+                    else:
+                        assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
+                            document_store, doc_store_field
+                        )
             else:
                 assert getattr(reconstructed_retriever, field) == getattr(retriever, field)
 
@@ -232,6 +245,7 @@ class TestMilvusSparseEmbeddingTests:
                 "sparse_vector_field": "sparse_vector",
                 "sparse_index_params": None,
                 "sparse_search_params": None,
+                "builtin_function": [],
                 "partition_key_field": None,
                 "partition_names": None,
                 "replica_number": 1,
@@ -267,6 +281,7 @@ class TestMilvusSparseEmbeddingTests:
                         "sparse_vector_field": "sparse_vector",
                         "sparse_index_params": None,
                         "sparse_search_params": None,
+                        "builtin_function": [],
                         "partition_key_field": None,
                         "partition_names": None,
                         "replica_number": 1,
@@ -288,9 +303,19 @@ class TestMilvusSparseEmbeddingTests:
                 for doc_store_field in vars(document_store):
                     if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
                         continue
-                    assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
-                        document_store, doc_store_field
-                    )
+                    if doc_store_field == "builtin_function":
+                        for func, func_reconstructed in zip(
+                            getattr(document_store, doc_store_field),
+                            getattr(reconstructed_retriever.document_store, doc_store_field),
+                        ):
+                            for k, v in func.to_dict().items():
+                                if k == "function_name":
+                                    continue
+                                assert v == func_reconstructed.to_dict()[k]
+                    else:
+                        assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
+                            document_store, doc_store_field
+                        )
             else:
                 assert getattr(reconstructed_retriever, field) == getattr(retriever, field)
 
@@ -377,6 +402,7 @@ class TestMilvusHybridTests:
                 "sparse_vector_field": "sparse_vector",
                 "sparse_index_params": None,
                 "sparse_search_params": None,
+                "builtin_function": [],
                 "partition_key_field": None,
                 "partition_names": None,
                 "replica_number": 1,
@@ -413,6 +439,7 @@ class TestMilvusHybridTests:
                         "sparse_vector_field": "sparse_vector",
                         "sparse_index_params": None,
                         "sparse_search_params": None,
+                        "builtin_function": [],
                         "partition_key_field": None,
                         "partition_names": None,
                         "replica_number": 1,
@@ -435,9 +462,209 @@ class TestMilvusHybridTests:
                 for doc_store_field in vars(document_store):
                     if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
                         continue
-                    assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
-                        document_store, doc_store_field
-                    )
+                    if doc_store_field == "builtin_function":
+                        for func, func_reconstructed in zip(
+                            getattr(document_store, doc_store_field),
+                            getattr(reconstructed_retriever.document_store, doc_store_field),
+                        ):
+                            for k, v in func.to_dict().items():
+                                if k == "function_name":
+                                    continue
+                                assert v == func_reconstructed.to_dict()[k]
+                    else:
+                        assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
+                            document_store, doc_store_field
+                        )
+            elif field == "reranker":
+                assert default_to_dict(getattr(reconstructed_retriever, field)) == default_to_dict(RRFRanker())
+            else:
+                assert getattr(reconstructed_retriever, field) == getattr(retriever, field)
+
+
+class TestMilvusBuiltInFunction:
+    @pytest.fixture
+    def document_store(self) -> MilvusDocumentStore:
+        document_store = MilvusDocumentStore(
+            connection_args=DEFAULT_CONNECTION_ARGS,
+            consistency_level="Strong",
+            drop_old=True,
+            text_field="text",
+            vector_field="vector",
+            sparse_vector_field="sparse",
+            # sparse_search_params={
+            #     "metric_type": "BM25",
+            # },
+            sparse_index_params={
+                "index_type": "AUTOINDEX",  # "SPARSE_INVERTED_INDEX",
+                "metric_type": "BM25",
+            },
+            builtin_function=[
+                BM25BuiltInFunction(
+                    function_name="bm25_function",
+                    input_field_names="text",
+                    output_field_names="sparse",
+                    # You can customize the analyzer_params and enable_match here.
+                    # See https://milvus.io/docs/analyzer-overview.md for more details.
+                    # analyzer_params=analyzer_params_custom,
+                    # enable_match=True,
+                )
+            ],
+        )
+        return document_store
+
+    @pytest.fixture
+    def documents(self) -> List[Document]:
+        documents = []
+        for i in range(10):
+            doc = Document(
+                content=f"Foo Document{i}",
+                meta={
+                    "name": f"name_{i}",
+                    "page": "100",
+                    "chapter": "intro",
+                    "number": 2,
+                    "date": "1969-07-21T20:17:40",
+                },
+                embedding=l2_normalization([0.5] * 64),
+            )
+            documents.append(doc)
+        return documents
+
+    def test_run_sparse_with_builtin_bm25_function(
+        self, document_store: MilvusDocumentStore, documents: List[Document]
+    ):
+        document_store.write_documents(documents)
+        retriever = MilvusSparseEmbeddingRetriever(
+            document_store,
+        )
+        res = retriever.run(query_text="Document5")
+        assert_docs_equal_except_score(res["documents"][0], documents[5])
+
+    def test_run_hybrid_with_builtin_bm25_function(
+        self, document_store: MilvusDocumentStore, documents: List[Document]
+    ):
+        document_store.write_documents(documents)
+        retriever = MilvusHybridRetriever(
+            document_store,
+        )
+        query_embedding = l2_normalization([0.5] * 64)
+        res = retriever.run(query_embedding, query_text="Document5")
+        assert len(res["documents"]) == 10
+        assert_docs_equal_except_score(res["documents"][0], documents[5])
+
+    def test_to_dict(self, document_store: MilvusDocumentStore):
+        expected_dict = {
+            "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
+            "init_parameters": {
+                "collection_name": "HaystackCollection",
+                "collection_description": "",
+                "collection_properties": None,
+                "connection_args": DEFAULT_CONNECTION_ARGS,
+                "consistency_level": "Strong",
+                "index_params": None,
+                "search_params": None,
+                "drop_old": True,
+                "primary_field": "id",
+                "text_field": "text",
+                "vector_field": "vector",
+                "sparse_vector_field": "sparse",
+                "sparse_index_params": {"index_type": "AUTOINDEX", "metric_type": "BM25"},
+                "sparse_search_params": None,
+                "builtin_function": [
+                    {
+                        "type": "src.milvus_haystack.function.BM25BuiltInFunction",
+                        "init_parameters": {
+                            "function_name": "bm25_function",
+                            "input_field_names": "text",
+                            "output_field_names": "sparse",
+                            "analyzer_params": None,
+                            "enable_match": False,
+                        },
+                    }
+                ],
+                "partition_key_field": None,
+                "partition_names": None,
+                "replica_number": 1,
+                "timeout": None,
+            },
+        }
+        retriever = MilvusHybridRetriever(document_store)
+        result = retriever.to_dict()
+
+        assert result["type"] == "src.milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever"
+        assert result["init_parameters"]["document_store"] == expected_dict
+        assert result["init_parameters"]["filters"] is None
+        assert result["init_parameters"]["top_k"] == 10
+        assert result["init_parameters"]["reranker"] == default_to_dict(RRFRanker())
+
+    def test_from_dict(self, document_store: MilvusDocumentStore):
+        retriever_dict = {
+            "type": "src.milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever",
+            "init_parameters": {
+                "document_store": {
+                    "type": "milvus_haystack.document_store.MilvusDocumentStore",
+                    "init_parameters": {
+                        "collection_name": "HaystackCollection",
+                        "collection_description": "",
+                        "collection_properties": None,
+                        "connection_args": DEFAULT_CONNECTION_ARGS,
+                        "consistency_level": "Strong",
+                        "index_params": None,
+                        "search_params": None,
+                        "drop_old": True,
+                        "primary_field": "id",
+                        "text_field": "text",
+                        "vector_field": "vector",
+                        "sparse_vector_field": "sparse",
+                        "sparse_index_params": {"index_type": "AUTOINDEX", "metric_type": "BM25"},
+                        "sparse_search_params": None,
+                        "builtin_function": [
+                            {
+                                "type": "src.milvus_haystack.function.BM25BuiltInFunction",
+                                "init_parameters": {
+                                    "function_name": "bm25_function",
+                                    "input_field_names": "text",
+                                    "output_field_names": "sparse",
+                                    "analyzer_params": None,
+                                    "enable_match": False,
+                                },
+                            }
+                        ],
+                        "partition_key_field": None,
+                        "partition_names": None,
+                        "replica_number": 1,
+                        "timeout": None,
+                    },
+                },
+                "filters": None,
+                "top_k": 10,
+                "reranker": {"type": "pymilvus.client.abstract.RRFRanker", "init_parameters": {}},
+            },
+        }
+
+        retriever = MilvusHybridRetriever(document_store)
+
+        reconstructed_retriever = MilvusHybridRetriever.from_dict(retriever_dict)
+        for field in vars(reconstructed_retriever):
+            if field.startswith("__"):
+                continue
+            elif field == "document_store":
+                for doc_store_field in vars(document_store):
+                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
+                        continue
+                    if doc_store_field == "builtin_function":
+                        for func, func_reconstructed in zip(
+                            getattr(document_store, doc_store_field),
+                            getattr(reconstructed_retriever.document_store, doc_store_field),
+                        ):
+                            for k, v in func.to_dict().items():
+                                if k == "function_name":
+                                    continue
+                                assert v == func_reconstructed.to_dict()[k]
+                    else:
+                        assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
+                            document_store, doc_store_field
+                        )
             elif field == "reranker":
                 assert default_to_dict(getattr(reconstructed_retriever, field)) == default_to_dict(RRFRanker())
             else:

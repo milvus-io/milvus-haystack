@@ -10,8 +10,8 @@ from src.milvus_haystack import MilvusDocumentStore
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONNECTION_ARGS = {
-    # "uri": "http://localhost:19530",  # This uri works for Milvus docker service
-    "uri": "./milvus_test.db",  # This uri works for Milvus Lite
+    "uri": "http://localhost:19530",  # This uri works for Milvus docker service
+    # "uri": "./milvus_test.db",  # This uri works for Milvus Lite
 }
 
 
@@ -70,6 +70,7 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
                 "sparse_vector_field": None,
                 "sparse_index_params": None,
                 "sparse_search_params": None,
+                "builtin_function": [],
                 "partition_key_field": None,
                 "partition_names": None,
                 "replica_number": 1,
@@ -81,4 +82,14 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         for field in vars(reconstructed_document_store):
             if field.startswith("__") or field in ["alias", "_milvus_client"]:
                 continue
-            assert getattr(reconstructed_document_store, field) == getattr(document_store, field)
+            if field == "builtin_function":
+                for func, func_reconstructed in zip(
+                    getattr(document_store, field),
+                    getattr(reconstructed_document_store, field),
+                ):
+                    for k, v in func.to_dict().items():
+                        if k == "function_name":
+                            continue
+                        assert v == func_reconstructed.to_dict()[k]
+            else:
+                assert getattr(reconstructed_document_store, field) == getattr(document_store, field)

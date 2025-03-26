@@ -120,7 +120,9 @@ class MilvusSparseEmbeddingRetriever:
         return default_from_dict(cls, data)
 
     @component.output_types(documents=List[Document])
-    def run(self, query_sparse_embedding: SparseEmbedding) -> Dict[str, List[Document]]:
+    def run(
+        self, query_sparse_embedding: Optional[SparseEmbedding] = None, query_text: Optional[str] = None
+    ) -> Dict[str, List[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their sparse embeddings.
 
@@ -131,6 +133,7 @@ class MilvusSparseEmbeddingRetriever:
             query_sparse_embedding=query_sparse_embedding,
             filters=self.filters,
             top_k=self.top_k,
+            query_text=query_text,
         )
         return {"documents": docs}
 
@@ -209,7 +212,12 @@ class MilvusHybridRetriever:
         return default_from_dict(cls, data)
 
     @component.output_types(documents=List[Document])
-    def run(self, query_embedding: List[float], query_sparse_embedding: SparseEmbedding):
+    def run(
+        self,
+        query_embedding: List[float],
+        query_sparse_embedding: Optional[SparseEmbedding] = None,
+        query_text: Optional[str] = None,
+    ):
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense and sparse embeddings.
 
@@ -223,5 +231,6 @@ class MilvusHybridRetriever:
             filters=self.filters,
             top_k=self.top_k,
             reranker=self.reranker,
+            query_text=query_text,
         )
         return {"documents": docs}

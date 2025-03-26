@@ -140,3 +140,51 @@ class TestMilvusFilters(FilterDocumentsTest):
 
     @pytest.mark.skip(reason="Milvus doesn't support comparison with None")
     def test_comparison_less_than_equal_with_none(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_greater_than_with_list(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_greater_than_with_string(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_greater_than_equal_with_string(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_greater_than_equal_with_list(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_less_than_with_string(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_less_than_with_list(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_less_than_equal_with_string(self, document_store, filterable_docs): ...
+
+    @pytest.mark.skip(
+        reason="When the dynamic_field is True, the metadata schema will not be recorded, "
+        "and it won't raise FilterError when querying with wrong metadata schema."
+    )
+    def test_comparison_less_than_equal_with_list(self, document_store, filterable_docs): ...

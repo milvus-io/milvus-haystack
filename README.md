@@ -185,7 +185,7 @@ documents = [
 ]
 
 sparse_document_embedder = FastembedSparseDocumentEmbedder()
-writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.OVERWRITE)
+writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.NONE)
 
 indexing_pipeline = Pipeline()
 indexing_pipeline.add_component("sparse_document_embedder", sparse_document_embedder)
@@ -235,7 +235,7 @@ documents = [
     Document(content="fastembed is supported by and maintained by Milvus."),
 ]
 
-writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.OVERWRITE)
+writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.NONE)
 
 indexing_pipeline = Pipeline()
 indexing_pipeline.add_component("sparse_doc_embedder", FastembedSparseDocumentEmbedder())
