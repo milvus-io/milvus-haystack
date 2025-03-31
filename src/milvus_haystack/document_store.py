@@ -835,7 +835,7 @@ class MilvusDocumentStore:
         res = self.col.search(
             data=[search_data],
             anns_field=self._sparse_vector_field,
-            param=self.sparse_index_params,
+            param=self.sparse_search_params,
             limit=top_k,
             expr=expr,
             output_fields=output_fields,
