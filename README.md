@@ -3,6 +3,10 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 
+## Recent Updates
+
+- [2025.4.17] [Full-text Search with Milvus and Haystack](https://milvus.io/docs/full_text_search_with_milvus_and_haystack.md) - Learn how to implement full-text and hybrid search in your application using Haystack and Milvus
+
 ## Installation
 
 ```shell
