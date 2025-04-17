@@ -458,14 +458,11 @@ class MilvusDocumentStore:
                 entity_dict[self._sparse_vector_field] = sparse_embeddings[i]
             if metas is not None:
                 for key, value in metas[i].items():
-                    if self.enable_dynamic_field:
-                        entity_dict[key] = value
-                        # The `self.fields` is used to check the filtering expression
-                        # when the `enable_dynamic_field` is True.
-                        if key not in self.fields:
-                            self.fields.append(key)
-                    elif key in self.fields:
-                        entity_dict[key] = value
+                    # if not enable_dynamic_field, skip fields not in the collection.
+                    if not self.enable_dynamic_field and key not in self.fields:
+                        continue
+                    # If enable_dynamic_field, all fields are allowed.
+                    entity_dict[key] = value
             insert_list.append(entity_dict)
 
         total_count = len(insert_list)
@@ -791,7 +788,7 @@ class MilvusDocumentStore:
             timeout=None,
         )
         distance_to_score_fn = self._select_score_fn()
-        docs = self._parse_search_result(res, output_fields=output_fields, distance_to_score_fn=distance_to_score_fn)
+        docs = self._parse_search_result(res, distance_to_score_fn=distance_to_score_fn)
         return docs
 
     def _sparse_embedding_retrieval(
@@ -841,7 +838,7 @@ class MilvusDocumentStore:
             output_fields=output_fields,
             timeout=None,
         )
-        docs = self._parse_search_result(res, output_fields=output_fields)
+        docs = self._parse_search_result(res)
         return docs
 
     def _hybrid_retrieval(
@@ -901,15 +898,13 @@ class MilvusDocumentStore:
 
         # Search topK docs based on dense and sparse vectors and rerank.
         res = self.col.hybrid_search([dense_req, sparse_req], rerank=reranker, limit=top_k, output_fields=output_fields)
-        docs = self._parse_search_result(res, output_fields=output_fields)
+        docs = self._parse_search_result(res)
         return docs
 
-    def _parse_search_result(self, result, output_fields=None, distance_to_score_fn=lambda x: x) -> List[Document]:
-        if output_fields is None:
-            output_fields = self._get_output_fields()
+    def _parse_search_result(self, result, distance_to_score_fn=lambda x: x) -> List[Document]:
         docs = []
         for res in result[0]:
-            data = {x: res.entity.get(x) for x in output_fields}
+            data = {x: res.entity.get(x) for x in res.entity.fields}
             doc = self._parse_document(data)
             doc.score = distance_to_score_fn(res.distance)
             docs.append(doc)
@@ -1021,6 +1016,10 @@ class MilvusDocumentStore:
         return search_data
 
     def _get_output_fields(self):
+        if self.enable_dynamic_field:
+            output_fields = ["*"]
+            return output_fields
+
         output_fields = self.fields[:]
         if self._sparse_vector_field and self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION:
             output_fields.remove(self._sparse_vector_field)
