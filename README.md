@@ -164,6 +164,9 @@ print('RAG answer:', results["generator"]["replies"][0])
 ```
 
 ## Sparse Retrieval
+### Sparse retrieval with haystack sparse embedder
+This example demonstrates the basic approach to sparse indexing and retrieval using Haystack's sparse embedders.
+
 ```python
 from haystack import Document, Pipeline
 from haystack.components.writers import DocumentWriter
@@ -185,7 +188,7 @@ documents = [
     Document(content="My name is Wolfgang and I live in Berlin"),
     Document(content="I saw a black horse running"),
     Document(content="Germany has many big cities"),
-    Document(content="fastembed is supported by and maintained by Milvus."),
+    Document(content="full text search is supported by Milvus."),
 ]
 
 sparse_document_embedder = FastembedSparseDocumentEmbedder()
@@ -198,22 +201,64 @@ indexing_pipeline.connect("sparse_document_embedder", "writer")
 
 indexing_pipeline.run({"sparse_document_embedder": {"documents": documents}})
 
-query_pipeline = Pipeline()
-query_pipeline.add_component("sparse_text_embedder", FastembedSparseTextEmbedder())
-query_pipeline.add_component("sparse_retriever", MilvusSparseEmbeddingRetriever(document_store=document_store))
-query_pipeline.connect("sparse_text_embedder.sparse_embedding", "sparse_retriever.query_sparse_embedding")
+retrieval_pipeline = Pipeline()
+retrieval_pipeline.add_component("sparse_text_embedder", FastembedSparseTextEmbedder())
+retrieval_pipeline.add_component("sparse_retriever", MilvusSparseEmbeddingRetriever(document_store=document_store))
+retrieval_pipeline.connect("sparse_text_embedder.sparse_embedding", "sparse_retriever.query_sparse_embedding")
 
-query = "Who supports fastembed?"
+query = "who supports full text search?"
 
-result = query_pipeline.run({"sparse_text_embedder": {"text": query}})
+result = retrieval_pipeline.run({"sparse_text_embedder": {"text": query}})
 
 print(result["sparse_retriever"]["documents"][0])
 
-# Document(id=..., content: 'fastembed is supported by and maintained by Milvus.', sparse_embedding: vector with 48 non-zero elements)
+# Document(id=..., content: 'full text search is supported by Milvus.', sparse_embedding: vector with 48 non-zero elements)
+```
+### Sparse retrieval with Milvus built-in BM25 function
+Milvus provides a built-in BM25 function that can generate sparse vectors directly from text fields. This approach simplifies the pipeline construction compared to using Haystack's sparse embedders. The main differences are:
+
+1. We need to specify a `BM25BuiltInFunction` in the document store with some field specification parameters.
+2. We don't need to use the embedder explicitly since Milvus handles the sparse embedding in the Milvus server end.
+3. The pipeline is simpler with fewer components and connections.
+
+Below is a complete example using Milvus' built-in BM25 function. The code with `+` signs shows the simplified approach using Milvus' built-in functionality, while the code with `-` signs shows the original approach that requires explicit sparse embedding:
+
+```diff
++ from milvus_haystack.function import BM25BuiltInFunction
++ 
+  document_store = MilvusDocumentStore(
+      connection_args={"uri": "http://localhost:19530"},
+      sparse_vector_field="sparse_vector",
+      text_field="text",
++     builtin_function=[
++         BM25BuiltInFunction(  # The BM25 function converts the text into a sparse vector.
++             input_field_names="text", output_field_names="sparse_vector",
++         )
++     ],
+      drop_old=True,
+  )
+- sparse_document_embedder = FastembedSparseDocumentEmbedder()
+  writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.NONE)
+  indexing_pipeline = Pipeline()
+- indexing_pipeline.add_component("sparse_document_embedder", sparse_document_embedder)
+  indexing_pipeline.add_component("writer", writer)
+- indexing_pipeline.connect("sparse_document_embedder", "writer")
+- indexing_pipeline.run({"sparse_document_embedder": {"documents": documents}})
++ indexing_pipeline.run({"writer": {"documents": documents}})
+  retrieval_pipeline = Pipeline()
+- retrieval_pipeline.add_component("sparse_text_embedder", FastembedSparseTextEmbedder())
+  retrieval_pipeline.add_component("sparse_retriever", MilvusSparseEmbeddingRetriever(document_store=document_store))
+- retrieval_pipeline.connect("sparse_text_embedder.sparse_embedding", "sparse_retriever.query_sparse_embedding")
+  query = "who supports full text search?"
+- result = retrieval_pipeline.run({"sparse_text_embedder": {"text": query}})
++ result = retrieval_pipeline.run({"sparse_retriever": {"query_text": query}})
+  print(result["sparse_retriever"]["documents"][0])
 ```
 
-## Hybrid Retrieval
 
+## Hybrid Retrieval
+### Hybrid retrieval with haystack sparse embedder
+This example demonstrates the basic approach to perform hybrid retrieval using Haystack's sparse embedders.
 ```python
 from haystack import Document, Pipeline
 from haystack.components.embedders import OpenAIDocumentEmbedder, OpenAITextEmbedder
@@ -236,7 +281,7 @@ documents = [
     Document(content="My name is Wolfgang and I live in Berlin"),
     Document(content="I saw a black horse running"),
     Document(content="Germany has many big cities"),
-    Document(content="fastembed is supported by and maintained by Milvus."),
+    Document(content="full text search is supported by Milvus."),
 ]
 
 writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.NONE)
@@ -250,12 +295,12 @@ indexing_pipeline.connect("dense_doc_embedder", "writer")
 
 indexing_pipeline.run({"sparse_doc_embedder": {"documents": documents}})
 
-querying_pipeline = Pipeline()
-querying_pipeline.add_component("sparse_text_embedder",
+retrieval_pipeline = Pipeline()
+retrieval_pipeline.add_component("sparse_text_embedder",
                                 FastembedSparseTextEmbedder(model="prithvida/Splade_PP_en_v1"))
 
-querying_pipeline.add_component("dense_text_embedder", OpenAITextEmbedder())
-querying_pipeline.add_component(
+retrieval_pipeline.add_component("dense_text_embedder", OpenAITextEmbedder())
+retrieval_pipeline.add_component(
     "retriever",
     MilvusHybridRetriever(
         document_store=document_store,
@@ -263,21 +308,62 @@ querying_pipeline.add_component(
     )
 )
 
-querying_pipeline.connect("sparse_text_embedder.sparse_embedding", "retriever.query_sparse_embedding")
-querying_pipeline.connect("dense_text_embedder.embedding", "retriever.query_embedding")
+retrieval_pipeline.connect("sparse_text_embedder.sparse_embedding", "retriever.query_sparse_embedding")
+retrieval_pipeline.connect("dense_text_embedder.embedding", "retriever.query_embedding")
 
-question = "Who supports fastembed?"
+question = "who supports full text search?"
 
-results = querying_pipeline.run(
+results = retrieval_pipeline.run(
     {"dense_text_embedder": {"text": question},
      "sparse_text_embedder": {"text": question}}
 )
 
 print(results["retriever"]["documents"][0])
 
-# Document(id=..., content: 'fastembed is supported by and maintained by Milvus.', embedding: vector of size 1536, sparse_embedding: vector with 48 non-zero elements)
-
+# Document(id=..., content: 'full text search is supported by Milvus.', embedding: vector of size 1536, sparse_embedding: vector with 48 non-zero elements)
 ```
+### Hybrid retrieval with Milvus built-in BM25 function
+Milvus provides a built-in BM25 function that can generate sparse vectors directly from text fields. This approach simplifies the pipeline construction compared to using Haystack's sparse embedders, making it a useful complement to semantic search. The main differences are:
+
+1. We need to specify a `BM25BuiltInFunction` in the document store with some field specification parameters.
+2. We don't need to use the embedder explicitly since Milvus handles the sparse embedding in the Milvus server end.
+3. The pipeline is simpler with fewer components and connections, which is especially beneficial in hybrid retrieval setups.
+
+Below is a complete example using Milvus' built-in BM25 function for hybrid retrieval. The code with `+` signs shows the simplified approach using Milvus' built-in functionality, while the code with `-` signs shows the original approach that requires explicit sparse embedding:
+
+```diff
++ from milvus_haystack.function import BM25BuiltInFunction
++ 
+  document_store = MilvusDocumentStore(
+      connection_args={"uri": "http://localhost:19530"},
+      sparse_vector_field="sparse_vector",
+      text_field="text",
++     builtin_function=[
++         BM25BuiltInFunction(  # The BM25 function converts the text into a sparse vector.
++             input_field_names="text", output_field_names="sparse_vector",
++         )
++     ],
+      drop_old=True,
+  )
+- sparse_document_embedder = FastembedSparseDocumentEmbedder()
+  writer = DocumentWriter(document_store=document_store, policy=DuplicatePolicy.NONE)
+  indexing_pipeline = Pipeline()
+- indexing_pipeline.add_component("sparse_document_embedder", sparse_document_embedder)
+  indexing_pipeline.add_component("writer", writer)
+- indexing_pipeline.connect("sparse_document_embedder", "writer")
+- indexing_pipeline.run({"sparse_document_embedder": {"documents": documents}})
++ indexing_pipeline.run({"writer": {"documents": documents}})
+  retrieval_pipeline = Pipeline()
+- retrieval_pipeline.add_component("sparse_text_embedder", FastembedSparseTextEmbedder())
+  retrieval_pipeline.add_component("sparse_retriever", MilvusSparseEmbeddingRetriever(document_store=document_store))
+- retrieval_pipeline.connect("sparse_text_embedder.sparse_embedding", "sparse_retriever.query_sparse_embedding")
+  query = "who supports full text search?"
+- result = retrieval_pipeline.run({"sparse_text_embedder": {"text": query}})
++ result = retrieval_pipeline.run({"sparse_retriever": {"query_text": query}})
+  print(result["sparse_retriever"]["documents"][0])
+```
+
+
 ## License
 
 `milvus-haystack` is distributed under the terms of the [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) license.
