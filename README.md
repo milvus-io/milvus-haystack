@@ -1,7 +1,27 @@
 # Milvus Document Store for Haystack
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![PyPI - Version](https://img.shields.io/pypi/v/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
+[![Twitter Follow](https://img.shields.io/twitter/follow/milvusio?style=social)](https://twitter.com/milvusio)
+ <a href="https://discord.gg/mKc3R95yE5"><img height="20" src="https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white" alt="discord"/></a>
+
+## Table of Contents
+- [Recent Updates](#recent-updates)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Different ways to connect to Milvus](#different-ways-to-connect-to-milvus)
+- [Dive deep usage](#dive-deep-usage)
+  - [Create the indexing Pipeline and index some documents](#create-the-indexing-pipeline-and-index-some-documents)
+  - [Create the retrieval pipeline and try a query](#create-the-retrieval-pipeline-and-try-a-query)
+  - [Create the RAG pipeline and try a query](#create-the-rag-pipeline-and-try-a-query)
+- [Sparse Retrieval](#sparse-retrieval)
+  - [Sparse retrieval with haystack sparse embedder](#sparse-retrieval-with-haystack-sparse-embedder)
+  - [Sparse retrieval with Milvus built-in BM25 function](#sparse-retrieval-with-milvus-built-in-bm25-function)
+- [Hybrid Retrieval](#hybrid-retrieval)
+  - [Hybrid retrieval with haystack sparse embedder](#hybrid-retrieval-with-haystack-sparse-embedder)
+  - [Hybrid retrieval with Milvus built-in BM25 function](#hybrid-retrieval-with-milvus-built-in-bm25-function)
+- [License](#license)
 
 ## Recent Updates
 
