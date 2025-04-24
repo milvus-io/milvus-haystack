@@ -3,6 +3,23 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 
+## Table of Contents
+- [Recent Updates](#recent-updates)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Different ways to connect to Milvus](#different-ways-to-connect-to-milvus)
+- [Dive deep usage](#dive-deep-usage)
+  - [Create the indexing Pipeline and index some documents](#create-the-indexing-pipeline-and-index-some-documents)
+  - [Create the retrieval pipeline and try a query](#create-the-retrieval-pipeline-and-try-a-query)
+  - [Create the RAG pipeline and try a query](#create-the-rag-pipeline-and-try-a-query)
+- [Sparse Retrieval](#sparse-retrieval)
+  - [Sparse retrieval with haystack sparse embedder](#sparse-retrieval-with-haystack-sparse-embedder)
+  - [Sparse retrieval with Milvus built-in BM25 function](#sparse-retrieval-with-milvus-built-in-bm25-function)
+- [Hybrid Retrieval](#hybrid-retrieval)
+  - [Hybrid retrieval with haystack sparse embedder](#hybrid-retrieval-with-haystack-sparse-embedder)
+  - [Hybrid retrieval with Milvus built-in BM25 function](#hybrid-retrieval-with-milvus-built-in-bm25-function)
+- [License](#license)
+
 ## Recent Updates
 
 - [2025.4.17] [Full-text Search with Milvus and Haystack](https://milvus.io/docs/full_text_search_with_milvus_and_haystack.md) - Learn how to implement full-text and hybrid search in your application using Haystack and Milvus
