@@ -1,7 +1,10 @@
 # Milvus Document Store for Haystack
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![PyPI - Version](https://img.shields.io/pypi/v/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/milvus-haystack.svg)](https://pypi.org/project/milvus-haystack)
+[![Twitter Follow](https://img.shields.io/twitter/follow/milvusio?style=social)](https://twitter.com/milvusio)
+ <a href="https://discord.gg/mKc3R95yE5"><img height="20" src="https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white" alt="discord"/></a>
 
 ## Table of Contents
 - [Recent Updates](#recent-updates)
