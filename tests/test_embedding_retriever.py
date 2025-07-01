@@ -480,6 +480,19 @@ class TestMilvusHybridTests:
             else:
                 assert getattr(reconstructed_retriever, field) == getattr(retriever, field)
 
+    def test_run_with_topk(self, document_store: MilvusDocumentStore, documents: List[Document]):
+        document_store.write_documents(documents)
+        retriever = MilvusHybridRetriever(document_store)
+        query_embedding = l2_normalization([0.5] * 64)
+        sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2 + 5], values=[1.0, 2.0, 3.0])
+        res = retriever.run(
+            query_embedding=query_embedding,
+            query_sparse_embedding=sparse_query_embedding,
+            top_k=5,
+        )
+        assert len(res["documents"]) == 5
+        assert_docs_equal_except_score(res["documents"][0], documents[5])
+
 
 class TestMilvusBuiltInFunction:
     @pytest.fixture

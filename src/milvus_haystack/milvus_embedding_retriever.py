@@ -57,7 +57,7 @@ class MilvusEmbeddingRetriever:
         return default_from_dict(cls, data)
 
     @component.output_types(documents=List[Document])
-    def run(self, query_embedding: List[float]) -> Dict[str, List[Document]]:
+    def run(self, query_embedding: List[float], top_k: Optional[int] = None) -> Dict[str, List[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense embeddings.
 
@@ -67,7 +67,7 @@ class MilvusEmbeddingRetriever:
         docs = self.document_store._embedding_retrieval(
             query_embedding=query_embedding,
             filters=self.filters,
-            top_k=self.top_k,
+            top_k=top_k or self.top_k,
         )
         return {"documents": docs}
 
@@ -121,7 +121,10 @@ class MilvusSparseEmbeddingRetriever:
 
     @component.output_types(documents=List[Document])
     def run(
-        self, query_sparse_embedding: Optional[SparseEmbedding] = None, query_text: Optional[str] = None
+        self,
+        query_sparse_embedding: Optional[SparseEmbedding] = None,
+        query_text: Optional[str] = None,
+        top_k: Optional[int] = None,
     ) -> Dict[str, List[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their sparse embeddings.
@@ -132,7 +135,7 @@ class MilvusSparseEmbeddingRetriever:
         docs = self.document_store._sparse_embedding_retrieval(
             query_sparse_embedding=query_sparse_embedding,
             filters=self.filters,
-            top_k=self.top_k,
+            top_k=top_k or self.top_k,
             query_text=query_text,
         )
         return {"documents": docs}
@@ -217,6 +220,7 @@ class MilvusHybridRetriever:
         query_embedding: List[float],
         query_sparse_embedding: Optional[SparseEmbedding] = None,
         query_text: Optional[str] = None,
+        top_k: Optional[int] = None,
     ):
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense and sparse embeddings.
@@ -229,7 +233,7 @@ class MilvusHybridRetriever:
             query_embedding=query_embedding,
             query_sparse_embedding=query_sparse_embedding,
             filters=self.filters,
-            top_k=self.top_k,
+            top_k=top_k or self.top_k,
             reranker=self.reranker,
             query_text=query_text,
         )
