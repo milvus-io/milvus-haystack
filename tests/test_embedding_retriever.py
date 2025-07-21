@@ -1,4 +1,5 @@
 import logging
+from dataclasses import fields
 from typing import List
 
 import numpy as np
@@ -34,8 +35,6 @@ def l2_normalization(x: List[float]) -> List[float]:
 
 
 def assert_docs_equal_except_score(doc1: Document, doc2: Document):
-    from dataclasses import fields
-
     field_names = [field.name for field in fields(Document) if field.name != "score"]
 
     for field_name in field_names:
