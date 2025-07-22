@@ -47,6 +47,7 @@ class TestMilvusEmbeddingTests:
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(
+            collection_name="TestMilvusEmbedding",
             connection_args=DEFAULT_CONNECTION_ARGS,
             consistency_level="Strong",
             drop_old=True,
@@ -80,7 +81,7 @@ class TestMilvusEmbeddingTests:
         expected_dict = {
             "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
-                "collection_name": "HaystackCollection",
+                "collection_name": "TestMilvusEmbedding",
                 "collection_description": "",
                 "collection_properties": None,
                 "connection_args": DEFAULT_CONNECTION_ARGS,
@@ -116,7 +117,7 @@ class TestMilvusEmbeddingTests:
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
                     "init_parameters": {
-                        "collection_name": "HaystackCollection",
+                        "collection_name": "TestMilvusEmbedding",
                         "collection_description": "",
                         "collection_properties": None,
                         "connection_args": DEFAULT_CONNECTION_ARGS,
@@ -173,6 +174,7 @@ class TestMilvusSparseEmbeddingTests:
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(
+            collection_name="TestMilvusSparseEmbedding",
             connection_args=DEFAULT_CONNECTION_ARGS,
             consistency_level="Strong",
             drop_old=True,
@@ -230,7 +232,7 @@ class TestMilvusSparseEmbeddingTests:
         expected_dict = {
             "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
-                "collection_name": "HaystackCollection",
+                "collection_name": "TestMilvusSparseEmbedding",
                 "collection_description": "",
                 "collection_properties": None,
                 "connection_args": DEFAULT_CONNECTION_ARGS,
@@ -266,7 +268,7 @@ class TestMilvusSparseEmbeddingTests:
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
                     "init_parameters": {
-                        "collection_name": "HaystackCollection",
+                        "collection_name": "TestMilvusSparseEmbedding",
                         "collection_description": "",
                         "collection_properties": None,
                         "connection_args": DEFAULT_CONNECTION_ARGS,
@@ -323,6 +325,7 @@ class TestMilvusHybridTests:
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         return MilvusDocumentStore(
+            collection_name="TestMilvusHybrid",
             connection_args=DEFAULT_CONNECTION_ARGS,
             consistency_level="Strong",
             drop_old=True,
@@ -387,7 +390,7 @@ class TestMilvusHybridTests:
         expected_dict = {
             "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
-                "collection_name": "HaystackCollection",
+                "collection_name": "TestMilvusHybrid",
                 "collection_description": "",
                 "collection_properties": None,
                 "connection_args": DEFAULT_CONNECTION_ARGS,
@@ -424,7 +427,7 @@ class TestMilvusHybridTests:
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
                     "init_parameters": {
-                        "collection_name": "HaystackCollection",
+                        "collection_name": "TestMilvusHybrid",
                         "collection_description": "",
                         "collection_properties": None,
                         "connection_args": DEFAULT_CONNECTION_ARGS,
@@ -497,6 +500,7 @@ class TestMilvusBuiltInFunction:
     @pytest.fixture
     def document_store(self) -> MilvusDocumentStore:
         document_store = MilvusDocumentStore(
+            collection_name="TestMilvusBuiltInFunction",
             connection_args=DEFAULT_CONNECTION_ARGS,
             consistency_level="Strong",
             drop_old=True,
@@ -568,7 +572,7 @@ class TestMilvusBuiltInFunction:
         expected_dict = {
             "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
-                "collection_name": "HaystackCollection",
+                "collection_name": "TestMilvusBuiltInFunction",
                 "collection_description": "",
                 "collection_properties": None,
                 "connection_args": DEFAULT_CONNECTION_ARGS,
@@ -616,7 +620,7 @@ class TestMilvusBuiltInFunction:
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
                     "init_parameters": {
-                        "collection_name": "HaystackCollection",
+                        "collection_name": "TestMilvusBuiltInFunction",
                         "collection_description": "",
                         "collection_properties": None,
                         "connection_args": DEFAULT_CONNECTION_ARGS,
