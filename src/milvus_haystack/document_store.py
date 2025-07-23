@@ -60,8 +60,8 @@ class MilvusDocumentStore:
         consistency_level: str = "Session",
         index_params: Optional[dict] = None,
         search_params: Optional[dict] = None,
-        drop_old: Optional[bool] = False,  # noqa: FBT002
         *,
+        drop_old: Optional[bool] = False,
         primary_field: str = PRIMARY_FIELD,
         text_field: str = TEXT_FIELD,
         vector_field: str = VECTOR_FIELD,
