@@ -27,7 +27,6 @@ dependencies = [
   "haystack-ai",
   "typing_extensions",
   "pymilvus>=2.5.6",
-  "pytest>=8.3.5",
 ]
 
 [project.urls]
@@ -153,10 +152,7 @@ omit = [
 ]
 
 [tool.coverage.paths]
-milvus_haystack = [
-  "src/milvus_haystack",
-  "*/milvus-haystack/src/milvus_haystack",
-]
+milvus_haystack = ["src/milvus_haystack", "*/milvus-haystack/src/milvus_haystack"]
 tests = ["tests", "*/milvus-haystack/tests"]
 
 [tool.coverage.report]
@@ -182,3 +178,8 @@ module = [
   "pytest.*"
 ]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
