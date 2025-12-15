@@ -1,6 +1,6 @@
 import logging
 from dataclasses import fields
-from typing import List
+from typing import Any, Dict, List
 
 import numpy as np
 import pytest
@@ -76,6 +76,42 @@ class TestMilvusEmbeddingTests:
         res = retriever.run(query_embedding)
         assert len(res["documents"]) == 10
         assert_docs_equal_except_score(res["documents"][0], documents[5])
+
+    def test_run_using_filters(self, document_store: MilvusDocumentStore):
+        """Test that filters are properly applied at runtime"""
+        documents = []
+        for i in range(10):
+            doc = Document(
+                content=f"Document {i}",
+                meta={
+                    "name": f"name_{i}",
+                    "page": str(100 + i),
+                    "chapter": "intro" if i < 5 else "outro",
+                    "number": i,
+                    "date": "1969-07-21T20:17:40",
+                },
+                embedding=l2_normalization([0.5] * 63 + [0.1 * i]),
+            )
+            documents.append(doc)
+        document_store.write_documents(documents)
+
+        # Test with runtime filters
+        retriever = MilvusEmbeddingRetriever(document_store)
+        query_embedding = l2_normalization([0.5] * 64)
+
+        # Filter: chapter == "intro" (should return 5 documents)
+        filters: Dict[str, Any] = {"field": "chapter", "operator": "==", "value": "intro"}
+        res = retriever.run(query_embedding, filters=filters)
+        assert len(res["documents"]) == 5
+        for doc in res["documents"]:
+            assert doc.meta["chapter"] == "intro"
+
+        # Filter: number >= 5 (should return 5 documents)
+        filters = {"field": "number", "operator": ">=", "value": 5}  # type: ignore[no-redef]
+        res = retriever.run(query_embedding, filters=filters)
+        assert len(res["documents"]) == 5
+        for doc in res["documents"]:
+            assert doc.meta["number"] >= 5
 
     def test_to_dict(self, document_store: MilvusDocumentStore):
         expected_dict = {
@@ -209,6 +245,43 @@ class TestMilvusSparseEmbeddingTests:
         res = retriever.run(sparse_query_embedding)
         assert len(res["documents"]) == 10
         assert_docs_equal_except_score(res["documents"][0], documents[5])
+
+    def test_run_using_filters(self, document_store: MilvusDocumentStore):
+        """Test that filters are properly applied at runtime for sparse retrieval"""
+        documents = []
+        for i in range(10):
+            doc = Document(
+                content=f"Document {i}",
+                meta={
+                    "name": f"name_{i}",
+                    "page": str(100 + i),
+                    "chapter": "intro" if i < 5 else "outro",
+                    "number": i,
+                    "date": "1969-07-21T20:17:40",
+                },
+                embedding=l2_normalization([0.5] * 64),
+                sparse_embedding=SparseEmbedding(indices=[0, 1, 2 + i], values=[1.0, 2.0, 3.0]),
+            )
+            documents.append(doc)
+        document_store.write_documents(documents)
+
+        # Test with runtime filters
+        retriever = MilvusSparseEmbeddingRetriever(document_store)
+        sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2 + 5], values=[1.0, 2.0, 3.0])
+
+        # Filter: chapter == "outro" (should return 5 documents)
+        filters: Dict[str, Any] = {"field": "chapter", "operator": "==", "value": "outro"}
+        res = retriever.run(sparse_query_embedding, filters=filters)
+        assert len(res["documents"]) == 5
+        for doc in res["documents"]:
+            assert doc.meta["chapter"] == "outro"
+
+        # Filter: number < 3 (should return 3 documents)
+        filters = {"field": "number", "operator": "<", "value": 3}  # type: ignore[no-redef]
+        res = retriever.run(sparse_query_embedding, filters=filters)
+        assert len(res["documents"]) == 3
+        for doc in res["documents"]:
+            assert doc.meta["number"] < 3
 
     def test_fail_without_sparse_field(self, documents: List[Document]):
         document_store = MilvusDocumentStore(
@@ -365,6 +438,52 @@ class TestMilvusHybridTests:
         )
         assert len(res["documents"]) == 10
         assert_docs_equal_except_score(res["documents"][0], documents[5])
+
+    def test_run_using_filters(self, document_store: MilvusDocumentStore):
+        """Test that filters are properly applied at runtime for hybrid retrieval"""
+        documents = []
+        for i in range(10):
+            doc = Document(
+                content=f"Hybrid Document {i}",
+                meta={
+                    "name": f"name_{i}",
+                    "page": str(100 + i),
+                    "chapter": "intro" if i < 5 else "outro",
+                    "number": i,
+                    "date": "1969-07-21T20:17:40",
+                },
+                embedding=l2_normalization([0.5] * 63 + [0.45 + 0.01 * i]),
+                sparse_embedding=SparseEmbedding(indices=[0, 1, 2 + i], values=[1.0, 2.0, 3.0]),
+            )
+            documents.append(doc)
+        document_store.write_documents(documents)
+
+        # Test with runtime filters
+        retriever = MilvusHybridRetriever(document_store)
+        query_embedding = l2_normalization([0.5] * 64)
+        sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2 + 5], values=[1.0, 2.0, 3.0])
+
+        # Filter: chapter == "intro" (should return 5 documents)
+        filters: Dict[str, Any] = {"field": "chapter", "operator": "==", "value": "intro"}
+        res = retriever.run(
+            query_embedding=query_embedding,
+            query_sparse_embedding=sparse_query_embedding,
+            filters=filters,
+        )
+        assert len(res["documents"]) == 5
+        for doc in res["documents"]:
+            assert doc.meta["chapter"] == "intro"
+
+        # Filter: number in [2, 4, 6, 8] (should return 4 documents)
+        filters = {"field": "number", "operator": "in", "value": [2, 4, 6, 8]}  # type: ignore[no-redef]
+        res = retriever.run(
+            query_embedding=query_embedding,
+            query_sparse_embedding=sparse_query_embedding,
+            filters=filters,
+        )
+        assert len(res["documents"]) == 4
+        for doc in res["documents"]:
+            assert doc.meta["number"] in [2, 4, 6, 8]
 
     def test_fail_without_sparse_field(self, documents: List[Document]):
         document_store = MilvusDocumentStore(

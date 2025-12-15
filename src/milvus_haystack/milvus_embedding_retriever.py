@@ -57,17 +57,23 @@ class MilvusEmbeddingRetriever:
         return default_from_dict(cls, data)
 
     @component.output_types(documents=List[Document])
-    def run(self, query_embedding: List[float], top_k: Optional[int] = None) -> Dict[str, List[Document]]:
+    def run(
+        self, query_embedding: List[float], top_k: Optional[int] = None, filters: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, List[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense embeddings.
 
         :param query_embedding: Embedding of the query.
+        :param top_k: Optional number of documents to retrieve. If provided, overrides the top_k
+            set during initialization.
+        :param filters: Optional filters to apply at runtime. If provided, overrides the filters
+            set during initialization.
         :return: List of Document similar to `query_embedding`.
         """
         docs = self.document_store._embedding_retrieval(
             query_embedding=query_embedding,
-            filters=self.filters,
             top_k=top_k or self.top_k,
+            filters=filters or self.filters,
         )
         return {"documents": docs}
 
@@ -125,17 +131,23 @@ class MilvusSparseEmbeddingRetriever:
         query_sparse_embedding: Optional[SparseEmbedding] = None,
         query_text: Optional[str] = None,
         top_k: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, List[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their sparse embeddings.
 
         :param query_sparse_embedding: Sparse Embedding of the query.
+        :param query_text: Optional text query for sparse retrieval.
+        :param top_k: Optional number of documents to retrieve. If provided, overrides the top_k
+            set during initialization.
+        :param filters: Optional filters to apply at runtime. If provided, overrides the filters
+            set during initialization.
         :return: List of Document similar to `query_embedding`.
         """
         docs = self.document_store._sparse_embedding_retrieval(
             query_sparse_embedding=query_sparse_embedding,
-            filters=self.filters,
             top_k=top_k or self.top_k,
+            filters=filters or self.filters,
             query_text=query_text,
         )
         return {"documents": docs}
@@ -221,18 +233,24 @@ class MilvusHybridRetriever:
         query_sparse_embedding: Optional[SparseEmbedding] = None,
         query_text: Optional[str] = None,
         top_k: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ):
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense and sparse embeddings.
 
         :param query_embedding: Dense Embedding of the query.
         :param query_sparse_embedding: Sparse Embedding of the query.
+        :param query_text: Optional text query for sparse retrieval.
+        :param top_k: Optional number of documents to retrieve. If provided, overrides the top_k
+            set during initialization.
+        :param filters: Optional filters to apply at runtime. If provided, overrides the filters
+            set during initialization.
         :return: List of Document similar to `query_embedding`.
         """
         docs = self.document_store._hybrid_retrieval(
             query_embedding=query_embedding,
             query_sparse_embedding=query_sparse_embedding,
-            filters=self.filters,
+            filters=filters or self.filters,
             top_k=top_k or self.top_k,
             reranker=self.reranker,
             query_text=query_text,
