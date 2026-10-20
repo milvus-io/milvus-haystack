@@ -1,3 +1,6 @@
+import json
+import math
+import re
 from typing import Any
 
 from haystack.errors import FilterError
@@ -19,13 +22,22 @@ COMPARISON_OPERATORS = [
     "not in",
 ]
 
+FIELD_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-def _value_to_str(value: int | float | str | list) -> str:
+
+def _value_to_str(value: Any) -> str:
     if isinstance(value, str):
-        # If the value is already a string, add double quotes
-        return f'"{value}"'
-    # If the value is not a string, convert it to a string without double quotes
-    return str(value)
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, bool):
+        return json.dumps(value)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float) and math.isfinite(value):
+        return str(value)
+    if isinstance(value, list):
+        return f"[{', '.join(_value_to_str(item) for item in value)}]"
+    msg = f"Unsupported filter value type: {type(value).__name__}"
+    raise FilterError(msg)
 
 
 def parse_filters(filters: dict[str, Any]) -> str:
@@ -52,6 +64,9 @@ def _parse_comparison(filters: dict[str, Any]) -> str:
     value = filters["value"]
     if field.startswith("meta."):
         field = field[5:]
+    if not FIELD_NAME_PATTERN.fullmatch(field):
+        msg = f"Invalid filter field name: {field!r}"
+        raise FilterError(msg)
     return f"({field} {operator} {_value_to_str(value)})"
 
 

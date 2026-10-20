@@ -945,7 +945,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "haystack-ai" },
+    { name = "haystack-ai", specifier = ">=3.0" },
     { name = "milvus-lite", marker = "extra == 'milvus-lite'", specifier = ">=3.0.0" },
     { name = "pymilvus", specifier = ">=3.0.2" },
 ]

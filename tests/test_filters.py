@@ -3,11 +3,32 @@ import logging
 import numpy as np
 import pytest
 from haystack import Document
+from haystack.errors import FilterError
 from haystack.testing.document_store import FilterDocumentsTest, _random_embeddings
 
-from src.milvus_haystack import MilvusDocumentStore
+from milvus_haystack import MilvusDocumentStore
+from milvus_haystack.filters import parse_filters
 
 logger = logging.getLogger(__name__)
+
+
+def test_filter_values_are_escaped():
+    expression = parse_filters({"field": "meta.name", "operator": "==", "value": 'a" or true or name == "b'})
+
+    assert expression == r'(name == "a\" or true or name == \"b")'
+
+
+def test_filter_list_values_are_encoded():
+    expression = parse_filters({"field": "name", "operator": "in", "value": ["a", "b"]})
+
+    assert expression == '(name in ["a", "b"])'
+
+
+@pytest.mark.parametrize("field", ["", "1name", "name || true", "meta.name.value"])
+def test_invalid_filter_field_names_are_rejected(field):
+    with pytest.raises(FilterError, match="Invalid filter field name"):
+        parse_filters({"field": field, "operator": "==", "value": "value"})
+
 
 DEFAULT_CONNECTION_ARGS = {
     "uri": "http://localhost:19530",  # This uri works for Milvus docker service

@@ -1,6 +1,6 @@
 import importlib
 import logging
-from copy import deepcopy
+from dataclasses import replace
 from numbers import Integral, Real
 from typing import Any
 
@@ -212,7 +212,11 @@ class MilvusDocumentStore:
         # Create the connection to the server
         resolved_args = connection_args if connection_args is not None else DEFAULT_MILVUS_CONNECTION
         self.connection_args = resolved_args
-        self._milvus_client = MilvusClient(**resolved_args)
+        client_args = dict(resolved_args)
+        for key in ("token", "password"):
+            if key in client_args:
+                client_args[key] = self._resolve_value(client_args[key])
+        self._milvus_client = MilvusClient(**client_args)
         self._collection_exists = self.client.has_collection(self.collection_name)
 
         # Apply properties to the existing collection if it exists
@@ -379,7 +383,7 @@ class MilvusDocumentStore:
         :return: Number of documents written.
         """
 
-        documents_cp = [MilvusDocumentStore._discard_invalid_meta(doc) for doc in deepcopy(documents)]
+        documents_cp = [MilvusDocumentStore._discard_invalid_meta(doc) for doc in documents]
         if len(documents_cp) > 0 and not isinstance(documents_cp[0], Document):
             err_msg = "param 'documents' must contain a list of objects of type Document"
             raise ValueError(err_msg)
@@ -400,20 +404,22 @@ class MilvusDocumentStore:
                 break
         empty_embedding = False
         empty_sparse_embedding = False
+        normalized_documents = []
         for doc in documents_cp:
+            updates: dict[str, Any] = {}
             if doc.embedding is None:
                 empty_embedding = True
-                dummy_vector = [self._dummy_value] * embedding_dim
-                doc.embedding = dummy_vector
+                updates["embedding"] = [self._dummy_value] * embedding_dim
             if doc.sparse_embedding is None and self._sparse_mode == EmbeddingMode.EMBEDDING_MODEL:
                 empty_sparse_embedding = True
-                dummy_sparse_vector = SparseEmbedding(
+                updates["sparse_embedding"] = SparseEmbedding(
                     indices=[0],
                     values=[self._dummy_value],
                 )
-                doc.sparse_embedding = dummy_sparse_vector
             if doc.content is None:
-                doc.content = ""
+                updates["content"] = ""
+            normalized_documents.append(replace(doc, **updates) if updates else doc)
+        documents_cp = normalized_documents
         if empty_embedding and self._sparse_vector_field is None:
             logger.warning(
                 "Milvus is a purely vector database, but document has no embedding. "
@@ -496,8 +502,7 @@ class MilvusDocumentStore:
         if not self._collection_exists:
             logger.debug("No existing collection to delete.")
             return None
-        expr = "id in ['" + "','".join(document_ids) + "']"
-        logger.info(expr)
+        expr = parse_filters({"field": self._primary_field, "operator": "in", "value": document_ids})
         self.client.delete(self.collection_name, filter=expr)
 
     def to_dict(self) -> dict[str, Any]:
@@ -520,10 +525,12 @@ class MilvusDocumentStore:
             "consistency_level": self.consistency_level,
             "index_params": self.index_params,
             "search_params": self.search_params,
-            "drop_old": self.drop_old,
+            # A restored store must reconnect to persisted data without deleting it.
+            "drop_old": False,
             "primary_field": self._primary_field,
             "text_field": self._text_field,
             "vector_field": self._vector_field,
+            "enable_dynamic_field": self.enable_dynamic_field,
             "sparse_vector_field": self._sparse_vector_field,
             "sparse_index_params": self.sparse_index_params,
             "sparse_search_params": self.sparse_search_params,
@@ -675,7 +682,7 @@ class MilvusDocumentStore:
                             }
                         else:  # self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION:
                             self.sparse_index_params = {
-                                "index_type": "AUTOINDEX",
+                                "index_type": "SPARSE_INVERTED_INDEX",
                                 "metric_type": "BM25",
                                 "params": {},
                             }
@@ -738,10 +745,10 @@ class MilvusDocumentStore:
         if secret:
             logger.warning(
                 "Some secret values are not encrypted. Please use `Secret` class to encrypt them. "
-                "The best way to implement it is to use `Secret.from_env` to load from environment variables. "
+                "The best way to implement it is to use `Secret.from_env_var` to load from environment variables. "
                 "For example:\n"
                 "from haystack.utils import Secret\n"
-                "token = Secret.from_env('YOUR_TOKEN_ENV_VAR_NAME')"
+                "token = Secret.from_env_var('YOUR_TOKEN_ENV_VAR_NAME')"
             )
         return secret
 
@@ -908,8 +915,7 @@ class MilvusDocumentStore:
         for res in result[0]:
             data = dict(res.fields)
             doc = self._parse_document(data)
-            doc.score = distance_to_score_fn(res.distance)
-            docs.append(doc)
+            docs.append(replace(doc, score=distance_to_score_fn(res.distance)))
         return docs
 
     def _select_score_fn(self):
@@ -995,7 +1001,7 @@ class MilvusDocumentStore:
                     f"Supported types refer to Pymilvus DataType. The values of these fields will be discarded."
                 )
                 logger.warning(msg)
-            document.meta = new_meta
+            return replace(document, meta=new_meta)
 
         return document
 
