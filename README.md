@@ -30,8 +30,10 @@
 ## Installation
 
 ```shell
-pip install --upgrade pymilvus milvus-haystack
+pip install --upgrade "milvus-haystack[milvus-lite]"
 ```
+
+For Milvus Server or Zilliz Cloud, install `milvus-haystack` without the `milvus-lite` extra.
 
 ## Usage
 

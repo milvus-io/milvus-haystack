@@ -1,8 +1,8 @@
 import importlib
 import logging
-import warnings
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Union
+from numbers import Integral, Real
+from typing import Any
 
 from haystack import Document, default_from_dict, default_to_dict
 from haystack.dataclasses.sparse_embedding import SparseEmbedding
@@ -10,18 +10,9 @@ from haystack.document_stores.errors import DocumentStoreError
 from haystack.document_stores.types import DuplicatePolicy
 from haystack.errors import FilterError
 from haystack.utils import Secret, deserialize_secrets_inplace
-from pymilvus import (
-    AnnSearchRequest,
-    CollectionSchema,
-    DataType,
-    FieldSchema,
-    MilvusClient,
-    MilvusException,
-    RRFRanker,
-)
+from pymilvus import AnnSearchRequest, DataType, MilvusClient, MilvusException, RRFRanker
 from pymilvus.client.abstract import BaseRanker
 from pymilvus.client.types import LoadState
-from pymilvus.orm.types import infer_dtype_bydata
 
 from milvus_haystack.filters import parse_filters
 from milvus_haystack.function import BaseMilvusBuiltInFunction, BM25BuiltInFunction
@@ -43,6 +34,32 @@ DEFAULT_MILVUS_CONNECTION = {
 }
 
 MAX_LIMIT_SIZE = 10_000
+MAX_ARRAY_CAPACITY = 4_096
+
+
+def _infer_field_definition(value: Any) -> tuple[DataType, dict[str, Any]]:
+    """Infer a Milvus field definition from a Haystack metadata value."""
+    if isinstance(value, bool):
+        return DataType.BOOL, {}
+    if isinstance(value, Integral):
+        return DataType.INT64, {}
+    if isinstance(value, Real):
+        return DataType.DOUBLE, {}
+    if isinstance(value, str):
+        return DataType.VARCHAR, {"max_length": 65_535}
+    if isinstance(value, dict):
+        return DataType.JSON, {}
+    if isinstance(value, list) and value:
+        element_type, _ = _infer_field_definition(value[0])
+        supported_element_types = {DataType.BOOL, DataType.INT64, DataType.DOUBLE, DataType.VARCHAR}
+        if element_type in supported_element_types and all(
+            _infer_field_definition(item)[0] == element_type for item in value
+        ):
+            field_params = {"element_type": element_type, "max_capacity": MAX_ARRAY_CAPACITY}
+            if element_type == DataType.VARCHAR:
+                field_params["max_length"] = 65_535
+            return DataType.ARRAY, field_params
+    return DataType.UNKNOWN, {}
 
 
 class MilvusDocumentStore:
@@ -54,25 +71,25 @@ class MilvusDocumentStore:
         self,
         collection_name: str = "HaystackCollection",
         collection_description: str = "",
-        collection_properties: Optional[Dict[str, Any]] = None,
-        connection_args: Optional[Dict[str, Any]] = None,
+        collection_properties: dict[str, Any] | None = None,
+        connection_args: dict[str, Any] | None = None,
         consistency_level: str = "Session",
-        index_params: Optional[dict] = None,
-        search_params: Optional[dict] = None,
+        index_params: dict | None = None,
+        search_params: dict | None = None,
         *,
-        drop_old: Optional[bool] = False,
+        drop_old: bool | None = False,
         primary_field: str = PRIMARY_FIELD,
         text_field: str = TEXT_FIELD,
         vector_field: str = VECTOR_FIELD,
         enable_dynamic_field: bool = True,
-        sparse_vector_field: Optional[str] = None,
-        sparse_index_params: Optional[dict] = None,
-        sparse_search_params: Optional[dict] = None,
-        builtin_function: Optional[Union[BaseMilvusBuiltInFunction, List[BaseMilvusBuiltInFunction]]] = None,
-        partition_key_field: Optional[str] = None,
-        partition_names: Optional[list] = None,
+        sparse_vector_field: str | None = None,
+        sparse_index_params: dict | None = None,
+        sparse_search_params: dict | None = None,
+        builtin_function: BaseMilvusBuiltInFunction | list[BaseMilvusBuiltInFunction] | None = None,
+        partition_key_field: str | None = None,
+        partition_names: list | None = None,
         replica_number: int = 1,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ):
         """
         Initialize the Milvus vector store.
@@ -181,11 +198,11 @@ class MilvusDocumentStore:
         self.sparse_index_params = sparse_index_params
         self.sparse_search_params = sparse_search_params
         self._partition_key_field = partition_key_field
-        self.fields: List[str] = []
+        self.fields: list[str] = []
         self.partition_names = partition_names
         self.replica_number = replica_number
         self.timeout = timeout
-        self.builtin_function: List[BaseMilvusBuiltInFunction] = []
+        self.builtin_function: list[BaseMilvusBuiltInFunction] = []
         if builtin_function:
             self.builtin_function = (
                 [builtin_function] if isinstance(builtin_function, BaseMilvusBuiltInFunction) else builtin_function
@@ -196,13 +213,10 @@ class MilvusDocumentStore:
         resolved_args = connection_args if connection_args is not None else DEFAULT_MILVUS_CONNECTION
         self.connection_args = resolved_args
         self._milvus_client = MilvusClient(**resolved_args)
-        self.alias = self.client._using
-        self._col_cache: Optional[Any] = None
-        self._cache_key: Optional[str] = None
-        self._collection_known_to_exist = False
+        self._collection_exists = self.client.has_collection(self.collection_name)
 
         # Apply properties to the existing collection if it exists
-        if self.client.has_collection(self.collection_name):
+        if self._collection_exists:
             if self.collection_properties is not None:
                 self.client.alter_collection_properties(self.collection_name, self.collection_properties)
             # If need to drop old, drop it
@@ -240,61 +254,9 @@ class MilvusDocumentStore:
         """Get client."""
         return self._milvus_client
 
-    @property
-    def col(self) -> Optional[Any]:
-        """The ORM `pymilvus.Collection` object, or None if the collection does not exist.
-
-        Deprecated: use `self.client` (a `MilvusClient`) instead. The ORM API is removed in pymilvus 3.1,
-        where accessing this property raises `MilvusStoreError`.
-        """
-        warnings.warn(
-            "`MilvusDocumentStore.col` is deprecated because pymilvus 3.1 removes the ORM `Collection` API. "
-            "Use `MilvusDocumentStore.client` (a `MilvusClient`) instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        try:
-            # Imported lazily: pymilvus 3.1 removes the ORM API, and nothing else needs it.
-            from pymilvus import Collection, connections  # noqa: PLC0415
-        except ImportError as err:
-            msg = "`MilvusDocumentStore.col` is unavailable with this pymilvus version; use `.client` instead."
-            raise MilvusStoreError(msg) from err
-
-        current_key = f"{self.collection_name}:{self.alias}"
-        if self._cache_key == current_key and self._col_cache is not None:
-            return self._col_cache
-        if self._collection_exists():
-            orm_alias = self.alias
-            # Since pymilvus 2.6.x, MilvusClient no longer registers its connection with the ORM
-            # `connections` registry, and clients of the same server share one handler and alias whatever
-            # their database. Register a per-database alias so `Collection` reads from this store's database.
-            if hasattr(connections, "_alias_handlers"):
-                db_name = getattr(getattr(self.client, "_config", None), "db_name", "") or "default"
-                orm_alias = f"{self.alias}:{db_name}"
-                connections._alias_handlers.setdefault(orm_alias, self.client._get_connection())
-                connections._alias_config.setdefault(orm_alias, {"db_name": db_name})
-            self._col_cache = Collection(self.collection_name, using=orm_alias)
-            self._cache_key = current_key
-            return self._col_cache
-        return None
-
-    def _collection_exists(self) -> bool:
-        # Cache only a positive result: a missing collection gets created later by `write_documents`.
-        if not self._collection_known_to_exist:
-            self._collection_known_to_exist = self.client.has_collection(self.collection_name)
-        return self._collection_known_to_exist
-
     def _drop_collection(self) -> None:
         self.client.drop_collection(self.collection_name)
-        # pymilvus keeps the dropped collection's schema in a connection-level
-        # cache, so recreating a collection with the same name can read back
-        # stale schema. See https://github.com/milvus-io/pymilvus/issues/3058
-        conn = self.client._get_connection()
-        if hasattr(conn, "schema_cache"):
-            conn.schema_cache.pop(self.collection_name, None)
-        self._col_cache = None
-        self._cache_key = None
-        self._collection_known_to_exist = False
+        self._collection_exists = False
 
     def count_documents(self) -> int:
         """
@@ -302,7 +264,7 @@ class MilvusDocumentStore:
 
         :return: The number of documents in the document store.
         """
-        if not self._collection_exists():
+        if not self._collection_exists:
             logger.debug("No existing collection to count.")
             return 0
         count_expr = "count(*)"
@@ -315,7 +277,7 @@ class MilvusDocumentStore:
         doc_num = res[0][count_expr]
         return doc_num
 
-    def filter_documents(self, filters: Optional[Dict[str, Any]] = None) -> List[Document]:
+    def filter_documents(self, filters: dict[str, Any] | None = None) -> list[Document]:
         """
         Returns the documents that match the filters provided.
 
@@ -381,7 +343,7 @@ class MilvusDocumentStore:
         :param filters: The filters to apply to the document list.
         :return: A list of Documents that match the given filters.
         """
-        if not self._collection_exists():
+        if not self._collection_exists:
             logger.debug("No existing collection to filter.")
             return []
         output_fields = self._get_output_fields()
@@ -407,7 +369,7 @@ class MilvusDocumentStore:
         docs = [self._parse_document(d) for d in res]
         return docs
 
-    def write_documents(self, documents: List[Document], policy: DuplicatePolicy = DuplicatePolicy.NONE) -> int:
+    def write_documents(self, documents: list[Document], policy: DuplicatePolicy = DuplicatePolicy.NONE) -> int:
         """
         Writes documents into the store.
 
@@ -482,7 +444,7 @@ class MilvusDocumentStore:
             return 0
 
         # If the collection hasn't been initialized yet, perform all steps to do so
-        if not self._collection_exists():
+        if not self._collection_exists:
             self._init(embeddings=embeddings, metas=metas, timeout=self.timeout)
 
         insert_list: list[dict] = []
@@ -510,7 +472,7 @@ class MilvusDocumentStore:
         total_count = len(insert_list)
         batch_size = 1000
         wrote_ids = []
-        if not self._collection_exists():
+        if not self._collection_exists:
             raise MilvusException(message="Collection is not initialized")
         for i in range(0, total_count, batch_size):
             # Grab end index
@@ -525,20 +487,20 @@ class MilvusDocumentStore:
                 raise err
         return len(wrote_ids)
 
-    def delete_documents(self, document_ids: List[str]) -> None:
+    def delete_documents(self, document_ids: list[str]) -> None:
         """
         Deletes all documents with a matching document_ids from the document store.
 
         :param document_ids: The object_ids to delete
         """
-        if not self._collection_exists():
+        if not self._collection_exists:
             logger.debug("No existing collection to delete.")
             return None
         expr = "id in ['" + "','".join(document_ids) + "']"
         logger.info(expr)
         self.client.delete(self.collection_name, filter=expr)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Returns a dictionary representation of the document store.
 
@@ -574,7 +536,7 @@ class MilvusDocumentStore:
         return default_to_dict(self, **init_parameters)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MilvusDocumentStore":
+    def from_dict(cls, data: dict[str, Any]) -> "MilvusDocumentStore":
         """
         Creates a new document store from a dictionary.
 
@@ -606,9 +568,9 @@ class MilvusDocumentStore:
 
     def _init(
         self,
-        embeddings: Optional[List] = None,
-        metas: Optional[List[Dict]] = None,
-        timeout: Optional[float] = None,
+        embeddings: list | None = None,
+        metas: list[dict] | None = None,
+        timeout: float | None = None,
     ) -> None:
         if embeddings is not None:
             self._create_collection(embeddings, metas)
@@ -617,46 +579,41 @@ class MilvusDocumentStore:
         self._create_search_params()
         self._load(timeout=timeout)
 
-    def _create_collection(self, embeddings: list, metas: Optional[List[Dict]] = None) -> None:
+    def _create_collection(self, embeddings: list, metas: list[dict] | None = None) -> None:
         # Determine embedding dim
         dim = len(embeddings[0])
-        fields = []
-        if not self.enable_dynamic_field and metas:
-            # Determine meta schema
-            # Create FieldSchema for each entry in meta.
-            for key, value in metas[0].items():
-                # Infer the corresponding datatype of the meta
-                dtype = infer_dtype_bydata(value)
-                # Datatype isn't compatible
-                if dtype in [DataType.UNKNOWN, DataType.NONE]:
-                    err_msg = f"Failure to create collection, unrecognized dtype for key: {key}"
-                    logger.error(err_msg)
-                    raise ValueError(err_msg)
-                # Datatype is a string/varchar equivalent
-                elif dtype == DataType.VARCHAR:
-                    fields.append(FieldSchema(key, DataType.VARCHAR, max_length=65_535))
-                else:
-                    fields.append(FieldSchema(key, dtype))
-
-        # Create the text field
-        fields.append(
-            FieldSchema(self._text_field, DataType.VARCHAR, max_length=65_535, **self._input_field_schema_kwargs)
-        )
-        # Create the primary key field
-        fields.append(FieldSchema(self._primary_field, DataType.VARCHAR, is_primary=True, max_length=65_535))
-        # Create the vector field, supports binary or float vectors
-        fields.append(FieldSchema(self._vector_field, infer_dtype_bydata(embeddings[0]), dim=dim))
-        if self._sparse_vector_field:
-            fields.append(FieldSchema(self._sparse_vector_field, DataType.SPARSE_FLOAT_VECTOR))
-
-        # Create the schema for the collection
-        schema = CollectionSchema(
-            fields,
+        schema = self.client.create_schema(
+            auto_id=False,
             description=self.collection_description,
             partition_key_field=self._partition_key_field,
             enable_dynamic_field=self.enable_dynamic_field,
             functions=[func.function for func in self.builtin_function],
         )
+        if not self.enable_dynamic_field and metas:
+            # Determine meta schema
+            for key, value in metas[0].items():
+                datatype, field_params = _infer_field_definition(value)
+                if datatype == DataType.UNKNOWN:
+                    err_msg = f"Failure to create collection, unrecognized dtype for key: {key}"
+                    logger.error(err_msg)
+                    raise ValueError(err_msg)
+                schema.add_field(field_name=key, datatype=datatype, **field_params)
+
+        schema.add_field(
+            field_name=self._text_field,
+            datatype=DataType.VARCHAR,
+            max_length=65_535,
+            **self._input_field_schema_kwargs,
+        )
+        schema.add_field(
+            field_name=self._primary_field,
+            datatype=DataType.VARCHAR,
+            is_primary=True,
+            max_length=65_535,
+        )
+        schema.add_field(field_name=self._vector_field, datatype=DataType.FLOAT_VECTOR, dim=dim)
+        if self._sparse_vector_field:
+            schema.add_field(field_name=self._sparse_vector_field, datatype=DataType.SPARSE_FLOAT_VECTOR)
 
         # Create the collection
         try:
@@ -665,6 +622,7 @@ class MilvusDocumentStore:
                 schema=schema,
                 consistency_level=self.consistency_level,
             )
+            self._collection_exists = True
             # Set the collection properties if they exist
             if self.collection_properties is not None:
                 self.client.alter_collection_properties(self.collection_name, self.collection_properties)
@@ -674,14 +632,14 @@ class MilvusDocumentStore:
 
     def _extract_fields(self) -> None:
         """Grab the existing fields from the Collection"""
-        if self._collection_exists():
+        if self._collection_exists:
             schema_info = self.client.describe_collection(self.collection_name)
             for x in schema_info["fields"]:
                 self.fields.append(x["name"])
 
     def _create_index(self) -> None:
         """Create an index on the collection"""
-        if self._collection_exists() and self._get_index() is None:
+        if self._collection_exists and self._get_index() is None:
             try:
                 # If no index params, use a default AUTOINDEX based one
                 if self.index_params is None:
@@ -736,7 +694,7 @@ class MilvusDocumentStore:
 
     def _create_search_params(self) -> None:
         """Generate search params based on the current index type"""
-        if self._collection_exists() and self.search_params is None:
+        if self._collection_exists and self.search_params is None:
             index = self._get_index()
             if index is not None:
                 index_type: str = index["index_type"]
@@ -744,9 +702,9 @@ class MilvusDocumentStore:
                 self.search_params = self.default_search_params[index_type]  # {"metric_type": "L2", "params": {}}
                 self.search_params["metric_type"] = metric_type
 
-    def _get_index(self) -> Optional[Dict[str, Any]]:
+    def _get_index(self) -> dict[str, Any] | None:
         """Return the vector index information if it exists"""
-        if not self._collection_exists():
+        if not self._collection_exists:
             return None
         # `describe_index` raises when the field has no index, but `list_indexes` returns an empty list.
         index_names = self.client.list_indexes(self.collection_name, field_name=self._vector_field)
@@ -754,7 +712,7 @@ class MilvusDocumentStore:
             return None
         return self.client.describe_index(self.collection_name, index_names[0])
 
-    def _load(self, timeout: Optional[float] = None) -> None:
+    def _load(self, timeout: float | None = None) -> None:
         """Load the collection if available."""
         if (
             self._get_index() is not None
@@ -774,7 +732,7 @@ class MilvusDocumentStore:
                     timeout=timeout,
                 )
 
-    def _resolve_value(self, secret: Union[str, Secret]):
+    def _resolve_value(self, secret: str | Secret):
         if isinstance(secret, Secret):
             return secret.resolve_value()
         if secret:
@@ -789,13 +747,13 @@ class MilvusDocumentStore:
 
     def _embedding_retrieval(
         self,
-        query_embedding: List[float],
-        filters: Optional[Dict[str, Any]] = None,
+        query_embedding: list[float],
+        filters: dict[str, Any] | None = None,
         top_k: int = 10,
-        query_text: Optional[str] = None,
-    ) -> List[Document]:
+        query_text: str | None = None,
+    ) -> list[Document]:
         """Dense embedding retrieval"""
-        if not self._collection_exists():
+        if not self._collection_exists:
             logger.debug("No existing collection to search.")
             return []
 
@@ -829,12 +787,12 @@ class MilvusDocumentStore:
     def _sparse_embedding_retrieval(
         self,
         query_sparse_embedding: SparseEmbedding,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         top_k: int = 10,
-        query_text: Optional[str] = None,
-    ) -> List[Document]:
+        query_text: str | None = None,
+    ) -> list[Document]:
         """Sparse embedding retrieval"""
-        if not self._collection_exists():
+        if not self._collection_exists:
             logger.debug("No existing collection to search.")
             return []
         if self._sparse_vector_field is None:
@@ -880,15 +838,15 @@ class MilvusDocumentStore:
 
     def _hybrid_retrieval(
         self,
-        query_embedding: List[float],
-        query_sparse_embedding: Optional[SparseEmbedding] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        query_embedding: list[float],
+        query_sparse_embedding: SparseEmbedding | None = None,
+        filters: dict[str, Any] | None = None,
         top_k: int = 10,
-        reranker: Optional[BaseRanker] = None,
-        query_text: Optional[str] = None,
-    ) -> List[Document]:
+        reranker: BaseRanker | None = None,
+        query_text: str | None = None,
+    ) -> list[Document]:
         """Hybrid retrieval using both dense and sparse embeddings"""
-        if not self._collection_exists():
+        if not self._collection_exists:
             logger.debug("No existing collection to search.")
             return []
         if self._sparse_vector_field is None:
@@ -945,7 +903,7 @@ class MilvusDocumentStore:
         docs = self._parse_search_result(res)
         return docs
 
-    def _parse_search_result(self, result, distance_to_score_fn=lambda x: x) -> List[Document]:
+    def _parse_search_result(self, result, distance_to_score_fn=lambda x: x) -> list[Document]:
         docs = []
         for res in result[0]:
             data = dict(res.fields)
@@ -1007,10 +965,10 @@ class MilvusDocumentStore:
             meta=data,
         )
 
-    def _convert_sparse_to_dict(self, sparse_embedding: SparseEmbedding) -> Dict:
-        return dict(zip(sparse_embedding.indices, sparse_embedding.values))
+    def _convert_sparse_to_dict(self, sparse_embedding: SparseEmbedding) -> dict:
+        return dict(zip(sparse_embedding.indices, sparse_embedding.values, strict=True))
 
-    def _convert_dict_to_sparse(self, sparse_dict: Dict) -> SparseEmbedding:
+    def _convert_dict_to_sparse(self, sparse_dict: dict) -> SparseEmbedding:
         return SparseEmbedding(indices=list(sparse_dict.keys()), values=list(sparse_dict.values()))
 
     @staticmethod
@@ -1025,8 +983,8 @@ class MilvusDocumentStore:
             discarded_keys = []
             new_meta = {}
             for key, value in document.meta.items():
-                dtype = infer_dtype_bydata(value)
-                if dtype in (DataType.UNKNOWN, DataType.NONE):
+                datatype, _ = _infer_field_definition(value)
+                if datatype == DataType.UNKNOWN:
                     discarded_keys.append(key)
                 else:
                     new_meta[key] = value
@@ -1044,11 +1002,11 @@ class MilvusDocumentStore:
     def _prepare_search_data(
         self,
         *,
-        query_text: Optional[str],
-        query_embedding: Optional[Union[List[float], SparseEmbedding]],
-        field: Optional[str],
-    ) -> Union[List[float], Dict, str]:
-        search_data: Union[str, List[float], SparseEmbedding] = query_embedding
+        query_text: str | None,
+        query_embedding: list[float] | SparseEmbedding | None,
+        field: str | None,
+    ) -> list[float] | dict | str:
+        search_data: str | list[float] | SparseEmbedding = query_embedding
         if self._sparse_vector_field is not None and field == self._sparse_vector_field:
             if self._sparse_mode == EmbeddingMode.BUILTIN_FUNCTION:
                 search_data = query_text

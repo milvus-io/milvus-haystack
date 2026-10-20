@@ -1,4 +1,4 @@
-from typing import Any, Dict, Union
+from typing import Any
 
 from haystack.errors import FilterError
 
@@ -20,7 +20,7 @@ COMPARISON_OPERATORS = [
 ]
 
 
-def _value_to_str(value: Union[int, float, str, list]) -> str:
+def _value_to_str(value: int | float | str | list) -> str:
     if isinstance(value, str):
         # If the value is already a string, add double quotes
         return f'"{value}"'
@@ -28,7 +28,7 @@ def _value_to_str(value: Union[int, float, str, list]) -> str:
     return str(value)
 
 
-def parse_filters(filters: Dict[str, Any]) -> str:
+def parse_filters(filters: dict[str, Any]) -> str:
     """
     Parse the filters dictionary into a string which used for milvus expr query.
     :param filters: The filters dictionary.
@@ -42,7 +42,7 @@ def parse_filters(filters: Dict[str, Any]) -> str:
     return _parse_logic(filters)
 
 
-def _parse_comparison(filters: Dict[str, Any]) -> str:
+def _parse_comparison(filters: dict[str, Any]) -> str:
     try:
         _assert_comparison_filter(filters)
     except AssertionError as assert_e:
@@ -55,7 +55,7 @@ def _parse_comparison(filters: Dict[str, Any]) -> str:
     return f"({field} {operator} {_value_to_str(value)})"
 
 
-def _assert_comparison_filter(filters: Dict[str, Any]):
+def _assert_comparison_filter(filters: dict[str, Any]):
     assert "operator" in filters, "operator must be specified in filters"  # noqa: S101
     assert "field" in filters, "field must be specified in filters"  # noqa: S101
     assert "value" in filters, "value must be specified in filters"  # noqa: S101
@@ -64,7 +64,7 @@ def _assert_comparison_filter(filters: Dict[str, Any]):
     )
 
 
-def _parse_logic(filters: Dict[str, Any]) -> str:
+def _parse_logic(filters: dict[str, Any]) -> str:
     try:
         _assert_logic_filter(filters)
     except AssertionError as assert_e:
@@ -82,7 +82,7 @@ def _parse_logic(filters: Dict[str, Any]) -> str:
     return f"({expr})"
 
 
-def _assert_logic_filter(filters: Dict[str, Any]):
+def _assert_logic_filter(filters: dict[str, Any]):
     assert "operator" in filters, "operator must be specified in filters"  # noqa: S101
     assert "conditions" in filters, "conditions must be specified in filters"  # noqa: S101
     assert filters["operator"] in LOGIC_OPERATORS, f"operator must be one of: {LOGIC_OPERATORS}"  # noqa: S101

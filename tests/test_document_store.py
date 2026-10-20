@@ -1,13 +1,12 @@
 import logging
 
-import pymilvus
 import pytest
 from haystack import Document
 from haystack.document_stores.types import DocumentStore
 from haystack.testing.document_store import CountDocumentsTest, DeleteDocumentsTest, WriteDocumentsTest
+from pymilvus import DataType, MilvusClient
 
 from src.milvus_haystack import MilvusDocumentStore
-from src.milvus_haystack.document_store import MilvusStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +81,13 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
         assert document_store_dict == expected_dict
         reconstructed_document_store = MilvusDocumentStore.from_dict(document_store_dict)
         for field in vars(reconstructed_document_store):
-            if field.startswith("__") or field in ["alias", "_milvus_client"]:
+            if field.startswith("__") or field == "_milvus_client":
                 continue
             if field == "builtin_function":
                 for func, func_reconstructed in zip(
                     getattr(document_store, field),
                     getattr(reconstructed_document_store, field),
+                    strict=True,
                 ):
                     for k, v in func.to_dict().items():
                         if k == "function_name":
@@ -118,24 +118,7 @@ class TestPymilvusApiUsage:
         assert index["metric_type"] == "COSINE"
         assert document_store.search_params == {"metric_type": "COSINE", "params": {"ef": 10}}
 
-    @pytest.mark.filterwarnings(r"ignore:.*will be removed in PyMilvus 3\.1")
-    def test_col_is_deprecated(self, document_store: MilvusDocumentStore):
-        document_store.write_documents([Document(content="test doc", embedding=[0.1, 0.2, 0.3, 0.4])])
-
-        with pytest.warns(DeprecationWarning, match="client"):
-            col = document_store.col
-
-        assert col is not None
-        assert col.name == document_store.collection_name
-
-    def test_col_raises_without_orm_api(self, document_store: MilvusDocumentStore, monkeypatch):
-        # Simulates pymilvus 3.1, which removes the ORM `Collection` API.
-        monkeypatch.delattr(pymilvus, "Collection")
-
-        with pytest.warns(DeprecationWarning), pytest.raises(MilvusStoreError, match="client"):
-            _ = document_store.col
-
-    def test_collection_existence_is_cached_after_creation(self, document_store: MilvusDocumentStore, monkeypatch):
+    def test_collection_state_is_tracked_after_creation(self, document_store: MilvusDocumentStore, monkeypatch):
         document_store.write_documents([Document(content="test doc", embedding=[0.1, 0.2, 0.3, 0.4])])
 
         calls = []
@@ -151,11 +134,42 @@ class TestPymilvusApiUsage:
 
         assert calls == []
 
-    @pytest.mark.filterwarnings(r"ignore:.*will be removed in PyMilvus 3\.1")
-    @pytest.mark.filterwarnings("ignore::DeprecationWarning")
-    def test_col_uses_configured_database(self):
-        db_name = "haystack_col_db_test"
-        admin = pymilvus.MilvusClient(**DEFAULT_CONNECTION_ARGS)
+    def test_static_schema_uses_client_schema_builder(self):
+        document_store = MilvusDocumentStore(
+            collection_name="StaticSchemaTest",
+            connection_args=DEFAULT_CONNECTION_ARGS,
+            consistency_level="Strong",
+            enable_dynamic_field=False,
+            drop_old=True,
+        )
+        document = Document(
+            content="test doc",
+            embedding=[0.1, 0.2, 0.3, 0.4],
+            meta={
+                "name": "example",
+                "count": 1,
+                "score": 0.5,
+                "active": True,
+                "details": {"source": "test"},
+                "tags": ["one", "two"],
+            },
+        )
+
+        document_store.write_documents([document])
+
+        fields = {
+            field["name"]: field for field in document_store.client.describe_collection("StaticSchemaTest")["fields"]
+        }
+        assert fields["name"]["type"] == DataType.VARCHAR
+        assert fields["count"]["type"] == DataType.INT64
+        assert fields["score"]["type"] == DataType.DOUBLE
+        assert fields["active"]["type"] == DataType.BOOL
+        assert fields["details"]["type"] == DataType.JSON
+        assert fields["tags"]["type"] == DataType.ARRAY
+
+    def test_client_uses_configured_database(self):
+        db_name = "haystack_client_db_test"
+        admin = MilvusClient(**DEFAULT_CONNECTION_ARGS)
         if db_name not in admin.list_databases():
             admin.create_database(db_name)
         try:
@@ -166,11 +180,11 @@ class TestPymilvusApiUsage:
             )
             document_store.write_documents([Document(content="test doc", embedding=[0.1, 0.2, 0.3, 0.4])])
 
-            col = document_store.col
-
-            assert col is not None
-            assert col.num_entities >= 0
+            assert document_store.count_documents() == 1
+            assert document_store.client.has_collection("ColDatabaseTest")
         finally:
-            # Not `admin.use_database()`: on pymilvus 2.5 it switches the connection shared with other tests.
-            pymilvus.MilvusClient(**{**DEFAULT_CONNECTION_ARGS, "db_name": db_name}).drop_collection("ColDatabaseTest")
+            database_client = MilvusClient(**{**DEFAULT_CONNECTION_ARGS, "db_name": db_name})
+            database_client.drop_collection("ColDatabaseTest")
+            database_client.close()
             admin.drop_database(db_name)
+            admin.close()

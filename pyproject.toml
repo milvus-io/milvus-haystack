@@ -7,7 +7,7 @@ name = "milvus-haystack"
 dynamic = ["version"]
 description = ''
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = "Apache-2.0"
 keywords = []
 authors = [
@@ -16,8 +16,6 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: Implementation :: CPython",
@@ -25,9 +23,11 @@ classifiers = [
 ]
 dependencies = [
   "haystack-ai",
-  "typing_extensions",
-  "pymilvus>=2.5.6",
+  "pymilvus>=3.0.2",
 ]
+
+[project.optional-dependencies]
+milvus-lite = ["milvus-lite>=3.0.0"]
 
 [project.urls]
 Documentation = "https://github.com/milvus-io/milvus-haystack#readme"
@@ -55,7 +55,7 @@ cov = [
 ]
 
 [[tool.hatch.envs.all.matrix]]
-python = ["3.8", "3.9", "3.10", "3.11"]
+python = ["3.10", "3.11"]
 
 [tool.hatch.envs.lint]
 detached = true
@@ -84,12 +84,12 @@ all = [
 allow-direct-references = true
 
 [tool.black]
-target-version = ["py37"]
+target-version = ["py310"]
 line-length = 120
 skip-string-normalization = true
 
 [tool.ruff]
-target-version = "py37"
+target-version = "py310"
 line-length = 120
 lint.select = [
   "A",
@@ -168,11 +168,6 @@ markers = [
   "unit: unit tests",
   "integration: integration tests"
 ]
-filterwarnings = [
-  # Fail on any pymilvus API scheduled for removal, so the suite proves forward compatibility.
-  'error:.*will be removed in PyMilvus 3\.1',
-]
-
 [[tool.mypy.overrides]]
 module = [
   "haystack.*",

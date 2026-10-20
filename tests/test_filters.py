@@ -1,5 +1,4 @@
 import logging
-from typing import List
 
 import numpy as np
 import pytest
@@ -19,7 +18,7 @@ DEFAULT_CONNECTION_ARGS = {
 
 class TestMilvusFilters(FilterDocumentsTest):
     @pytest.fixture
-    def filterable_docs(self) -> List[Document]:
+    def filterable_docs(self) -> list[Document]:
         documents = []
         for i in range(3):
             documents.append(
@@ -71,7 +70,7 @@ class TestMilvusFilters(FilterDocumentsTest):
             drop_old=True,
         )
 
-    def assert_documents_are_equal(self, received: List[Document], expected: List[Document]):
+    def assert_documents_are_equal(self, received: list[Document], expected: list[Document]):
         """
         Assert that two lists of Documents are equal.
         This is used in every test, if a Document Store implementation has a different behaviour
@@ -83,7 +82,7 @@ class TestMilvusFilters(FilterDocumentsTest):
         assert len(received) == len(expected)
         received.sort(key=lambda x: x.id)
         expected.sort(key=lambda x: x.id)
-        for r, e in zip(received, expected):
+        for r, e in zip(received, expected, strict=True):
             assert r.content == e.content
             assert r.meta == e.meta
             assert r.content_type == e.content_type

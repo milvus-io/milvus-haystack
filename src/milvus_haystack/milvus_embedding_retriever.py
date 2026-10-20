@@ -1,5 +1,5 @@
 import importlib
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from haystack import DeserializationError, Document, component, default_from_dict, default_to_dict
 from haystack.dataclasses.sparse_embedding import SparseEmbedding
@@ -15,7 +15,7 @@ class MilvusEmbeddingRetriever:
     A component for retrieving documents from a Milvus Document Store.
     """
 
-    def __init__(self, document_store: MilvusDocumentStore, filters: Optional[Dict[str, Any]] = None, top_k: int = 10):
+    def __init__(self, document_store: MilvusDocumentStore, filters: dict[str, Any] | None = None, top_k: int = 10):
         """
         Initializes a new instance of the MilvusEmbeddingRetriever.
 
@@ -27,7 +27,7 @@ class MilvusEmbeddingRetriever:
         self.top_k = top_k
         self.document_store = document_store
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Returns a dictionary representation of the retriever component.
 
@@ -39,7 +39,7 @@ class MilvusEmbeddingRetriever:
         )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MilvusEmbeddingRetriever":
+    def from_dict(cls, data: dict[str, Any]) -> "MilvusEmbeddingRetriever":
         """
         Creates a new retriever from a dictionary.
 
@@ -56,10 +56,10 @@ class MilvusEmbeddingRetriever:
 
         return default_from_dict(cls, data)
 
-    @component.output_types(documents=List[Document])
+    @component.output_types(documents=list[Document])
     def run(
-        self, query_embedding: List[float], top_k: Optional[int] = None, filters: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, List[Document]]:
+        self, query_embedding: list[float], top_k: int | None = None, filters: dict[str, Any] | None = None
+    ) -> dict[str, list[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense embeddings.
 
@@ -84,7 +84,7 @@ class MilvusSparseEmbeddingRetriever:
     A component for retrieving documents using sparse embeddings from a Milvus Document Store.
     """
 
-    def __init__(self, document_store: MilvusDocumentStore, filters: Optional[Dict[str, Any]] = None, top_k: int = 10):
+    def __init__(self, document_store: MilvusDocumentStore, filters: dict[str, Any] | None = None, top_k: int = 10):
         """
         Initializes a new instance of the MilvusSparseEmbeddingRetriever.
 
@@ -96,7 +96,7 @@ class MilvusSparseEmbeddingRetriever:
         self.top_k = top_k
         self.document_store = document_store
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Returns a dictionary representation of the retriever component.
 
@@ -108,7 +108,7 @@ class MilvusSparseEmbeddingRetriever:
         )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MilvusEmbeddingRetriever":
+    def from_dict(cls, data: dict[str, Any]) -> "MilvusEmbeddingRetriever":
         """
         Creates a new retriever from a dictionary.
 
@@ -125,14 +125,14 @@ class MilvusSparseEmbeddingRetriever:
 
         return default_from_dict(cls, data)
 
-    @component.output_types(documents=List[Document])
+    @component.output_types(documents=list[Document])
     def run(
         self,
-        query_sparse_embedding: Optional[SparseEmbedding] = None,
-        query_text: Optional[str] = None,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, List[Document]]:
+        query_sparse_embedding: SparseEmbedding | None = None,
+        query_text: str | None = None,
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> dict[str, list[Document]]:
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their sparse embeddings.
 
@@ -162,9 +162,9 @@ class MilvusHybridRetriever:
     def __init__(
         self,
         document_store: MilvusDocumentStore,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         top_k: int = 10,
-        reranker: Optional[BaseRanker] = None,
+        reranker: BaseRanker | None = None,
     ):
         """
         Initializes a new instance of the MilvusHybridRetriever.
@@ -181,7 +181,7 @@ class MilvusHybridRetriever:
             reranker = RRFRanker()
         self.reranker = reranker
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Returns a dictionary representation of the retriever component.
 
@@ -197,7 +197,7 @@ class MilvusHybridRetriever:
         )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MilvusEmbeddingRetriever":
+    def from_dict(cls, data: dict[str, Any]) -> "MilvusEmbeddingRetriever":
         """
         Creates a new retriever from a dictionary.
 
@@ -226,14 +226,14 @@ class MilvusHybridRetriever:
             )
         return default_from_dict(cls, data)
 
-    @component.output_types(documents=List[Document])
+    @component.output_types(documents=list[Document])
     def run(
         self,
-        query_embedding: List[float],
-        query_sparse_embedding: Optional[SparseEmbedding] = None,
-        query_text: Optional[str] = None,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        query_embedding: list[float],
+        query_sparse_embedding: SparseEmbedding | None = None,
+        query_text: str | None = None,
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
     ):
         """
         Retrieve documents from the `MilvusDocumentStore`, based on their dense and sparse embeddings.
