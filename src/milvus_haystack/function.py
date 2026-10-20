@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from haystack import default_from_dict, default_to_dict
 from pymilvus import Function, FunctionType
@@ -16,18 +16,18 @@ class BaseMilvusBuiltInFunction:
     """
 
     def __init__(self) -> None:
-        self._function: Optional[Function] = None
+        self._function: Function | None = None
 
     @property
     def function(self) -> Function:
         return self._function
 
     @property
-    def input_field_names(self) -> Union[str, List[str]]:
+    def input_field_names(self) -> str | list[str]:
         return self.function.input_field_names
 
     @property
-    def output_field_names(self) -> Union[str, List[str]]:
+    def output_field_names(self) -> str | list[str]:
         return self.function.output_field_names
 
     @property
@@ -48,9 +48,9 @@ class BM25BuiltInFunction(BaseMilvusBuiltInFunction):
         *,
         input_field_names: str = TEXT_FIELD,
         output_field_names: str = SPARSE_VECTOR_FIELD,
-        analyzer_params: Optional[Dict[Any, Any]] = None,
+        analyzer_params: dict[Any, Any] | None = None,
         enable_match: bool = False,
-        function_name: Optional[str] = None,
+        function_name: str | None = None,
     ):
         """
         Args:
@@ -77,15 +77,15 @@ class BM25BuiltInFunction(BaseMilvusBuiltInFunction):
             output_field_names=output_field_names,
             function_type=FunctionType.BM25,
         )
-        self.analyzer_params: Optional[Dict[Any, Any]] = analyzer_params
+        self.analyzer_params: dict[Any, Any] | None = analyzer_params
         self.enable_match = enable_match
 
-    def get_input_field_schema_kwargs(self) -> Dict:
+    def get_input_field_schema_kwargs(self) -> dict:
         """
         Get the input field schema kwargs for the function.
 
         """
-        field_schema_kwargs: Dict[Any, Any] = {
+        field_schema_kwargs: dict[Any, Any] = {
             "enable_analyzer": True,
             "enable_match": self.enable_match,
         }
@@ -93,7 +93,7 @@ class BM25BuiltInFunction(BaseMilvusBuiltInFunction):
             field_schema_kwargs["analyzer_params"] = self.analyzer_params
         return field_schema_kwargs
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serialize the function to a dictionary.
 
@@ -109,7 +109,7 @@ class BM25BuiltInFunction(BaseMilvusBuiltInFunction):
         return default_to_dict(self, **init_parameters)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BM25BuiltInFunction":
+    def from_dict(cls, data: dict[str, Any]) -> "BM25BuiltInFunction":
         """
         Deserialize the function from a dictionary.
 

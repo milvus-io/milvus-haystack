@@ -1,14 +1,34 @@
 import logging
-from typing import List
 
 import numpy as np
 import pytest
 from haystack import Document
+from haystack.errors import FilterError
 from haystack.testing.document_store import FilterDocumentsTest, _random_embeddings
 
-from src.milvus_haystack import MilvusDocumentStore
+from milvus_haystack import MilvusDocumentStore
+from milvus_haystack.filters import parse_filters
 
 logger = logging.getLogger(__name__)
+
+
+def test_filter_values_are_escaped():
+    expression = parse_filters({"field": "meta.name", "operator": "==", "value": 'a" or true or name == "b'})
+
+    assert expression == r'(name == "a\" or true or name == \"b")'
+
+
+def test_filter_list_values_are_encoded():
+    expression = parse_filters({"field": "name", "operator": "in", "value": ["a", "b"]})
+
+    assert expression == '(name in ["a", "b"])'
+
+
+@pytest.mark.parametrize("field", ["", "1name", "name || true", "meta.name.value"])
+def test_invalid_filter_field_names_are_rejected(field):
+    with pytest.raises(FilterError, match="Invalid filter field name"):
+        parse_filters({"field": field, "operator": "==", "value": "value"})
+
 
 DEFAULT_CONNECTION_ARGS = {
     "uri": "http://localhost:19530",  # This uri works for Milvus docker service
@@ -19,7 +39,7 @@ DEFAULT_CONNECTION_ARGS = {
 
 class TestMilvusFilters(FilterDocumentsTest):
     @pytest.fixture
-    def filterable_docs(self) -> List[Document]:
+    def filterable_docs(self) -> list[Document]:
         documents = []
         for i in range(3):
             documents.append(
@@ -71,7 +91,7 @@ class TestMilvusFilters(FilterDocumentsTest):
             drop_old=True,
         )
 
-    def assert_documents_are_equal(self, received: List[Document], expected: List[Document]):
+    def assert_documents_are_equal(self, received: list[Document], expected: list[Document]):
         """
         Assert that two lists of Documents are equal.
         This is used in every test, if a Document Store implementation has a different behaviour
@@ -83,7 +103,7 @@ class TestMilvusFilters(FilterDocumentsTest):
         assert len(received) == len(expected)
         received.sort(key=lambda x: x.id)
         expected.sort(key=lambda x: x.id)
-        for r, e in zip(received, expected):
+        for r, e in zip(received, expected, strict=True):
             assert r.content == e.content
             assert r.meta == e.meta
             assert r.content_type == e.content_type

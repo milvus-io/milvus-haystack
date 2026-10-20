@@ -30,8 +30,10 @@
 ## Installation
 
 ```shell
-pip install --upgrade pymilvus milvus-haystack
+pip install --upgrade "milvus-haystack[milvus-lite]"
 ```
+
+For Milvus Server or Zilliz Cloud, install `milvus-haystack` without the `milvus-lite` extra.
 
 ## Usage
 
@@ -94,6 +96,12 @@ Prepare an OpenAI API key and set it as an environment variable:
 export OPENAI_API_KEY=<your_api_key>
 ```
 
+The Markdown indexing example also requires Haystack's optional Markdown converter dependencies:
+
+```shell
+pip install --upgrade markdown-it-py mdit_plain "nltk>=3.9.1"
+```
+
 ### Create the indexing Pipeline and index some documents
 
 ```python
@@ -137,7 +145,7 @@ question = "How to set the service uri with milvus lite?"  # You can replace it 
 retrieval_pipeline = Pipeline()
 retrieval_pipeline.add_component("embedder", OpenAITextEmbedder())
 retrieval_pipeline.add_component("retriever", MilvusEmbeddingRetriever(document_store=document_store, top_k=3))
-retrieval_pipeline.connect("embedder", "retriever")
+retrieval_pipeline.connect("embedder.embedding", "retriever.query_embedding")
 
 retrieval_results = retrieval_pipeline.run({"embedder": {"text": question}})
 
@@ -151,7 +159,7 @@ for doc in retrieval_results["retriever"]["documents"]:
 ```python
 from haystack.utils import Secret
 from haystack.components.builders import PromptBuilder
-from haystack.components.generators import OpenAIGenerator
+from haystack.components.generators.chat import OpenAIChatGenerator
 
 prompt_template = """Answer the following query based on the provided context. If the context does
                      not include an answer, reply with 'I don't know'.\n
@@ -167,11 +175,13 @@ rag_pipeline = Pipeline()
 rag_pipeline.add_component("text_embedder", OpenAITextEmbedder())
 rag_pipeline.add_component("retriever", MilvusEmbeddingRetriever(document_store=document_store, top_k=3))
 rag_pipeline.add_component("prompt_builder", PromptBuilder(template=prompt_template))
-rag_pipeline.add_component("generator", OpenAIGenerator(api_key=Secret.from_token(os.getenv("OPENAI_API_KEY")),
-                                                        generation_kwargs={"temperature": 0}))
+rag_pipeline.add_component(
+    "generator",
+    OpenAIChatGenerator(api_key=Secret.from_token(os.getenv("OPENAI_API_KEY"))),
+)
 rag_pipeline.connect("text_embedder.embedding", "retriever.query_embedding")
 rag_pipeline.connect("retriever.documents", "prompt_builder.documents")
-rag_pipeline.connect("prompt_builder", "generator")
+rag_pipeline.connect("prompt_builder.prompt", "generator.messages")
 
 results = rag_pipeline.run(
     {
@@ -179,13 +189,19 @@ results = rag_pipeline.run(
         "prompt_builder": {"query": question},
     }
 )
-print('RAG answer:', results["generator"]["replies"][0])
+print('RAG answer:', results["generator"]["replies"][0].text)
 
 ```
 
 ## Sparse Retrieval
 ### Sparse retrieval with haystack sparse embedder
 This example demonstrates the basic approach to sparse indexing and retrieval using Haystack's sparse embedders.
+
+Install the optional FastEmbed integration (Python 3.11 or newer):
+
+```shell
+pip install --upgrade fastembed-haystack
+```
 
 ```python
 from haystack import Document, Pipeline
@@ -317,14 +333,14 @@ indexing_pipeline.run({"sparse_doc_embedder": {"documents": documents}})
 
 retrieval_pipeline = Pipeline()
 retrieval_pipeline.add_component("sparse_text_embedder",
-                                FastembedSparseTextEmbedder(model="prithvida/Splade_PP_en_v1"))
+                                FastembedSparseTextEmbedder(model="prithivida/Splade_PP_en_v1"))
 
 retrieval_pipeline.add_component("dense_text_embedder", OpenAITextEmbedder())
 retrieval_pipeline.add_component(
     "retriever",
     MilvusHybridRetriever(
         document_store=document_store,
-        # reranker=WeightedRanker(0.5, 0.5),  # Default is RRFRanker()
+        # reranker=WeightedRanker(0.5, 0.5),  # Supported by Milvus Server and Zilliz Cloud.
     )
 )
 

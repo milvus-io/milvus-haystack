@@ -1,17 +1,18 @@
 import logging
 from dataclasses import fields
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 import pytest
 from haystack import Document, default_to_dict
 from haystack.dataclasses.sparse_embedding import SparseEmbedding
-from pymilvus import RRFRanker
+from pymilvus import RRFRanker, WeightedRanker
+from pymilvus.client.abstract import BaseRanker
 
-from src.milvus_haystack import MilvusDocumentStore
-from src.milvus_haystack.document_store import MilvusStoreError
-from src.milvus_haystack.function import BM25BuiltInFunction
-from src.milvus_haystack.milvus_embedding_retriever import (
+from milvus_haystack import MilvusDocumentStore
+from milvus_haystack.document_store import MilvusStoreError
+from milvus_haystack.function import BM25BuiltInFunction
+from milvus_haystack.milvus_embedding_retriever import (
     MilvusEmbeddingRetriever,
     MilvusHybridRetriever,
     MilvusSparseEmbeddingRetriever,
@@ -25,7 +26,7 @@ DEFAULT_CONNECTION_ARGS = {
 }
 
 
-def l2_normalization(x: List[float]) -> List[float]:
+def l2_normalization(x: list[float]) -> list[float]:
     v = np.array(x)
     l2_norm = np.linalg.norm(v)
     if l2_norm == 0:
@@ -100,7 +101,7 @@ class TestMilvusEmbeddingTests:
         query_embedding = l2_normalization([0.5] * 64)
 
         # Filter: chapter == "intro" (should return 5 documents)
-        filters: Dict[str, Any] = {"field": "chapter", "operator": "==", "value": "intro"}
+        filters: dict[str, Any] = {"field": "chapter", "operator": "==", "value": "intro"}
         res = retriever.run(query_embedding, filters=filters)
         assert len(res["documents"]) == 5
         for doc in res["documents"]:
@@ -115,7 +116,7 @@ class TestMilvusEmbeddingTests:
 
     def test_to_dict(self, document_store: MilvusDocumentStore):
         expected_dict = {
-            "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
+            "type": "milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
                 "collection_name": "TestMilvusEmbedding",
                 "collection_description": "",
@@ -124,10 +125,11 @@ class TestMilvusEmbeddingTests:
                 "consistency_level": "Strong",
                 "index_params": None,
                 "search_params": None,
-                "drop_old": True,
+                "drop_old": False,
                 "primary_field": "id",
                 "text_field": "text",
                 "vector_field": "vector",
+                "enable_dynamic_field": True,
                 "sparse_vector_field": None,
                 "sparse_index_params": None,
                 "sparse_search_params": None,
@@ -141,14 +143,14 @@ class TestMilvusEmbeddingTests:
         retriever = MilvusEmbeddingRetriever(document_store)
         result = retriever.to_dict()
 
-        assert result["type"] == "src.milvus_haystack.milvus_embedding_retriever.MilvusEmbeddingRetriever"
+        assert result["type"] == "milvus_haystack.milvus_embedding_retriever.MilvusEmbeddingRetriever"
         assert result["init_parameters"]["document_store"] == expected_dict
         assert result["init_parameters"]["filters"] is None
         assert result["init_parameters"]["top_k"] == 10
 
     def test_from_dict(self, document_store: MilvusDocumentStore):
         retriever_dict = {
-            "type": "src.milvus_haystack.milvus_embedding_retriever.MilvusEmbeddingRetriever",
+            "type": "milvus_haystack.milvus_embedding_retriever.MilvusEmbeddingRetriever",
             "init_parameters": {
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
@@ -160,10 +162,11 @@ class TestMilvusEmbeddingTests:
                         "consistency_level": "Strong",
                         "index_params": None,
                         "search_params": None,
-                        "drop_old": True,
+                        "drop_old": False,
                         "primary_field": "id",
                         "text_field": "text",
                         "vector_field": "vector",
+                        "enable_dynamic_field": True,
                         "sparse_vector_field": None,
                         "sparse_index_params": None,
                         "sparse_search_params": None,
@@ -187,17 +190,20 @@ class TestMilvusEmbeddingTests:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
+                    if doc_store_field.startswith("__") or doc_store_field == "_milvus_client":
                         continue
                     if doc_store_field == "builtin_function":
                         for func, func_reconstructed in zip(
                             getattr(document_store, doc_store_field),
                             getattr(reconstructed_retriever.document_store, doc_store_field),
+                            strict=True,
                         ):
                             for k, v in func.to_dict().items():
                                 if k == "function_name":
                                     continue
                                 assert v == func_reconstructed.to_dict()[k]
+                    elif doc_store_field == "drop_old":
+                        assert reconstructed_retriever.document_store.drop_old is False
                     else:
                         assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                             document_store, doc_store_field
@@ -218,7 +224,7 @@ class TestMilvusSparseEmbeddingTests:
         )
 
     @pytest.fixture
-    def documents(self) -> List[Document]:
+    def documents(self) -> list[Document]:
         documents = []
         for i in range(10):
             doc = Document(
@@ -236,7 +242,7 @@ class TestMilvusSparseEmbeddingTests:
             documents.append(doc)
         return documents
 
-    def test_run(self, document_store: MilvusDocumentStore, documents: List[Document]):
+    def test_run(self, document_store: MilvusDocumentStore, documents: list[Document]):
         document_store.write_documents(documents)
         retriever = MilvusSparseEmbeddingRetriever(
             document_store,
@@ -270,7 +276,7 @@ class TestMilvusSparseEmbeddingTests:
         sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2 + 5], values=[1.0, 2.0, 3.0])
 
         # Filter: chapter == "outro" (should return 5 documents)
-        filters: Dict[str, Any] = {"field": "chapter", "operator": "==", "value": "outro"}
+        filters: dict[str, Any] = {"field": "chapter", "operator": "==", "value": "outro"}
         res = retriever.run(sparse_query_embedding, filters=filters)
         assert len(res["documents"]) == 5
         for doc in res["documents"]:
@@ -283,7 +289,7 @@ class TestMilvusSparseEmbeddingTests:
         for doc in res["documents"]:
             assert doc.meta["number"] < 3
 
-    def test_fail_without_sparse_field(self, documents: List[Document]):
+    def test_fail_without_sparse_field(self, documents: list[Document]):
         document_store = MilvusDocumentStore(
             connection_args=DEFAULT_CONNECTION_ARGS,
             consistency_level="Strong",
@@ -303,7 +309,7 @@ class TestMilvusSparseEmbeddingTests:
 
     def test_to_dict(self, document_store: MilvusDocumentStore):
         expected_dict = {
-            "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
+            "type": "milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
                 "collection_name": "TestMilvusSparseEmbedding",
                 "collection_description": "",
@@ -312,10 +318,11 @@ class TestMilvusSparseEmbeddingTests:
                 "consistency_level": "Strong",
                 "index_params": None,
                 "search_params": None,
-                "drop_old": True,
+                "drop_old": False,
                 "primary_field": "id",
                 "text_field": "text",
                 "vector_field": "vector",
+                "enable_dynamic_field": True,
                 "sparse_vector_field": "sparse_vector",
                 "sparse_index_params": None,
                 "sparse_search_params": None,
@@ -329,14 +336,14 @@ class TestMilvusSparseEmbeddingTests:
         retriever = MilvusSparseEmbeddingRetriever(document_store)
         result = retriever.to_dict()
 
-        assert result["type"] == "src.milvus_haystack.milvus_embedding_retriever.MilvusSparseEmbeddingRetriever"
+        assert result["type"] == "milvus_haystack.milvus_embedding_retriever.MilvusSparseEmbeddingRetriever"
         assert result["init_parameters"]["document_store"] == expected_dict
         assert result["init_parameters"]["filters"] is None
         assert result["init_parameters"]["top_k"] == 10
 
     def test_from_dict(self, document_store: MilvusDocumentStore):
         retriever_dict = {
-            "type": "src.milvus_haystack.milvus_embedding_retriever.MilvusSparseEmbeddingRetriever",
+            "type": "milvus_haystack.milvus_embedding_retriever.MilvusSparseEmbeddingRetriever",
             "init_parameters": {
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
@@ -348,10 +355,11 @@ class TestMilvusSparseEmbeddingTests:
                         "consistency_level": "Strong",
                         "index_params": None,
                         "search_params": None,
-                        "drop_old": True,
+                        "drop_old": False,
                         "primary_field": "id",
                         "text_field": "text",
                         "vector_field": "vector",
+                        "enable_dynamic_field": True,
                         "sparse_vector_field": "sparse_vector",
                         "sparse_index_params": None,
                         "sparse_search_params": None,
@@ -375,17 +383,20 @@ class TestMilvusSparseEmbeddingTests:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
+                    if doc_store_field.startswith("__") or doc_store_field == "_milvus_client":
                         continue
                     if doc_store_field == "builtin_function":
                         for func, func_reconstructed in zip(
                             getattr(document_store, doc_store_field),
                             getattr(reconstructed_retriever.document_store, doc_store_field),
+                            strict=True,
                         ):
                             for k, v in func.to_dict().items():
                                 if k == "function_name":
                                     continue
                                 assert v == func_reconstructed.to_dict()[k]
+                    elif doc_store_field == "drop_old":
+                        assert reconstructed_retriever.document_store.drop_old is False
                     else:
                         assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                             document_store, doc_store_field
@@ -407,7 +418,7 @@ class TestMilvusHybridTests:
         )
 
     @pytest.fixture
-    def documents(self) -> List[Document]:
+    def documents(self) -> list[Document]:
         documents = []
         for i in range(10):
             doc = Document(
@@ -425,7 +436,7 @@ class TestMilvusHybridTests:
             documents.append(doc)
         return documents
 
-    def test_run(self, document_store: MilvusDocumentStore, documents: List[Document]):
+    def test_run(self, document_store: MilvusDocumentStore, documents: list[Document]):
         document_store.write_documents(documents)
         retriever = MilvusHybridRetriever(
             document_store,
@@ -464,7 +475,7 @@ class TestMilvusHybridTests:
         sparse_query_embedding = SparseEmbedding(indices=[0, 1, 2 + 5], values=[1.0, 2.0, 3.0])
 
         # Filter: chapter == "intro" (should return 5 documents)
-        filters: Dict[str, Any] = {"field": "chapter", "operator": "==", "value": "intro"}
+        filters: dict[str, Any] = {"field": "chapter", "operator": "==", "value": "intro"}
         res = retriever.run(
             query_embedding=query_embedding,
             query_sparse_embedding=sparse_query_embedding,
@@ -485,7 +496,7 @@ class TestMilvusHybridTests:
         for doc in res["documents"]:
             assert doc.meta["number"] in [2, 4, 6, 8]
 
-    def test_fail_without_sparse_field(self, documents: List[Document]):
+    def test_fail_without_sparse_field(self, documents: list[Document]):
         document_store = MilvusDocumentStore(
             connection_args=DEFAULT_CONNECTION_ARGS,
             consistency_level="Strong",
@@ -507,7 +518,7 @@ class TestMilvusHybridTests:
 
     def test_to_dict(self, document_store: MilvusDocumentStore):
         expected_dict = {
-            "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
+            "type": "milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
                 "collection_name": "TestMilvusHybrid",
                 "collection_description": "",
@@ -516,10 +527,11 @@ class TestMilvusHybridTests:
                 "consistency_level": "Strong",
                 "index_params": None,
                 "search_params": None,
-                "drop_old": True,
+                "drop_old": False,
                 "primary_field": "id",
                 "text_field": "text",
                 "vector_field": "vector",
+                "enable_dynamic_field": True,
                 "sparse_vector_field": "sparse_vector",
                 "sparse_index_params": None,
                 "sparse_search_params": None,
@@ -533,15 +545,15 @@ class TestMilvusHybridTests:
         retriever = MilvusHybridRetriever(document_store)
         result = retriever.to_dict()
 
-        assert result["type"] == "src.milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever"
+        assert result["type"] == "milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever"
         assert result["init_parameters"]["document_store"] == expected_dict
         assert result["init_parameters"]["filters"] is None
         assert result["init_parameters"]["top_k"] == 10
-        assert result["init_parameters"]["reranker"] == default_to_dict(RRFRanker())
+        assert result["init_parameters"]["reranker"] == default_to_dict(RRFRanker(), k=60)
 
     def test_from_dict(self, document_store: MilvusDocumentStore):
         retriever_dict = {
-            "type": "src.milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever",
+            "type": "milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever",
             "init_parameters": {
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
@@ -553,10 +565,11 @@ class TestMilvusHybridTests:
                         "consistency_level": "Strong",
                         "index_params": None,
                         "search_params": None,
-                        "drop_old": True,
+                        "drop_old": False,
                         "primary_field": "id",
                         "text_field": "text",
                         "vector_field": "vector",
+                        "enable_dynamic_field": True,
                         "sparse_vector_field": "sparse_vector",
                         "sparse_index_params": None,
                         "sparse_search_params": None,
@@ -581,17 +594,20 @@ class TestMilvusHybridTests:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
+                    if doc_store_field.startswith("__") or doc_store_field == "_milvus_client":
                         continue
                     if doc_store_field == "builtin_function":
                         for func, func_reconstructed in zip(
                             getattr(document_store, doc_store_field),
                             getattr(reconstructed_retriever.document_store, doc_store_field),
+                            strict=True,
                         ):
                             for k, v in func.to_dict().items():
                                 if k == "function_name":
                                     continue
                                 assert v == func_reconstructed.to_dict()[k]
+                    elif doc_store_field == "drop_old":
+                        assert reconstructed_retriever.document_store.drop_old is False
                     else:
                         assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                             document_store, doc_store_field
@@ -601,7 +617,7 @@ class TestMilvusHybridTests:
             else:
                 assert getattr(reconstructed_retriever, field) == getattr(retriever, field)
 
-    def test_run_with_topk(self, document_store: MilvusDocumentStore, documents: List[Document]):
+    def test_run_with_topk(self, document_store: MilvusDocumentStore, documents: list[Document]):
         document_store.write_documents(documents)
         retriever = MilvusHybridRetriever(document_store)
         query_embedding = l2_normalization([0.5] * 64)
@@ -613,6 +629,17 @@ class TestMilvusHybridTests:
         )
         assert len(res["documents"]) == 5
         assert_docs_equal_except_score(res["documents"][0], documents[5])
+
+    @pytest.mark.parametrize(
+        "reranker",
+        [RRFRanker(k=20), WeightedRanker(0.35, 0.65, norm_score=False)],
+    )
+    def test_ranker_parameters_round_trip(self, document_store: MilvusDocumentStore, reranker: BaseRanker):
+        retriever = MilvusHybridRetriever(document_store, reranker=reranker)
+
+        reconstructed = MilvusHybridRetriever.from_dict(retriever.to_dict())
+
+        assert reconstructed.reranker.dict() == reranker.dict()
 
 
 class TestMilvusBuiltInFunction:
@@ -630,7 +657,7 @@ class TestMilvusBuiltInFunction:
             #     "metric_type": "BM25",
             # },
             sparse_index_params={
-                "index_type": "AUTOINDEX",  # "SPARSE_INVERTED_INDEX",
+                "index_type": "SPARSE_INVERTED_INDEX",
                 "metric_type": "BM25",
             },
             builtin_function=[
@@ -648,7 +675,7 @@ class TestMilvusBuiltInFunction:
         return document_store
 
     @pytest.fixture
-    def documents(self) -> List[Document]:
+    def documents(self) -> list[Document]:
         documents = []
         for i in range(10):
             doc = Document(
@@ -666,7 +693,7 @@ class TestMilvusBuiltInFunction:
         return documents
 
     def test_run_sparse_with_builtin_bm25_function(
-        self, document_store: MilvusDocumentStore, documents: List[Document]
+        self, document_store: MilvusDocumentStore, documents: list[Document]
     ):
         document_store.write_documents(documents)
         retriever = MilvusSparseEmbeddingRetriever(
@@ -676,7 +703,7 @@ class TestMilvusBuiltInFunction:
         assert_docs_equal_except_score(res["documents"][0], documents[5])
 
     def test_run_hybrid_with_builtin_bm25_function(
-        self, document_store: MilvusDocumentStore, documents: List[Document]
+        self, document_store: MilvusDocumentStore, documents: list[Document]
     ):
         document_store.write_documents(documents)
         retriever = MilvusHybridRetriever(
@@ -689,7 +716,7 @@ class TestMilvusBuiltInFunction:
 
     def test_to_dict(self, document_store: MilvusDocumentStore):
         expected_dict = {
-            "type": "src.milvus_haystack.document_store.MilvusDocumentStore",
+            "type": "milvus_haystack.document_store.MilvusDocumentStore",
             "init_parameters": {
                 "collection_name": "TestMilvusBuiltInFunction",
                 "collection_description": "",
@@ -698,16 +725,17 @@ class TestMilvusBuiltInFunction:
                 "consistency_level": "Strong",
                 "index_params": None,
                 "search_params": None,
-                "drop_old": True,
+                "drop_old": False,
                 "primary_field": "id",
                 "text_field": "text",
                 "vector_field": "vector",
+                "enable_dynamic_field": True,
                 "sparse_vector_field": "sparse",
-                "sparse_index_params": {"index_type": "AUTOINDEX", "metric_type": "BM25"},
+                "sparse_index_params": {"index_type": "SPARSE_INVERTED_INDEX", "metric_type": "BM25"},
                 "sparse_search_params": None,
                 "builtin_function": [
                     {
-                        "type": "src.milvus_haystack.function.BM25BuiltInFunction",
+                        "type": "milvus_haystack.function.BM25BuiltInFunction",
                         "init_parameters": {
                             "function_name": "bm25_function",
                             "input_field_names": "text",
@@ -726,15 +754,15 @@ class TestMilvusBuiltInFunction:
         retriever = MilvusHybridRetriever(document_store)
         result = retriever.to_dict()
 
-        assert result["type"] == "src.milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever"
+        assert result["type"] == "milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever"
         assert result["init_parameters"]["document_store"] == expected_dict
         assert result["init_parameters"]["filters"] is None
         assert result["init_parameters"]["top_k"] == 10
-        assert result["init_parameters"]["reranker"] == default_to_dict(RRFRanker())
+        assert result["init_parameters"]["reranker"] == default_to_dict(RRFRanker(), k=60)
 
     def test_from_dict(self, document_store: MilvusDocumentStore):
         retriever_dict = {
-            "type": "src.milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever",
+            "type": "milvus_haystack.milvus_embedding_retriever.MilvusHybridRetriever",
             "init_parameters": {
                 "document_store": {
                     "type": "milvus_haystack.document_store.MilvusDocumentStore",
@@ -746,16 +774,17 @@ class TestMilvusBuiltInFunction:
                         "consistency_level": "Strong",
                         "index_params": None,
                         "search_params": None,
-                        "drop_old": True,
+                        "drop_old": False,
                         "primary_field": "id",
                         "text_field": "text",
                         "vector_field": "vector",
+                        "enable_dynamic_field": True,
                         "sparse_vector_field": "sparse",
-                        "sparse_index_params": {"index_type": "AUTOINDEX", "metric_type": "BM25"},
+                        "sparse_index_params": {"index_type": "SPARSE_INVERTED_INDEX", "metric_type": "BM25"},
                         "sparse_search_params": None,
                         "builtin_function": [
                             {
-                                "type": "src.milvus_haystack.function.BM25BuiltInFunction",
+                                "type": "milvus_haystack.function.BM25BuiltInFunction",
                                 "init_parameters": {
                                     "function_name": "bm25_function",
                                     "input_field_names": "text",
@@ -785,17 +814,20 @@ class TestMilvusBuiltInFunction:
                 continue
             elif field == "document_store":
                 for doc_store_field in vars(document_store):
-                    if doc_store_field.startswith("__") or doc_store_field in ["alias", "_milvus_client"]:
+                    if doc_store_field.startswith("__") or doc_store_field == "_milvus_client":
                         continue
                     if doc_store_field == "builtin_function":
                         for func, func_reconstructed in zip(
                             getattr(document_store, doc_store_field),
                             getattr(reconstructed_retriever.document_store, doc_store_field),
+                            strict=True,
                         ):
                             for k, v in func.to_dict().items():
                                 if k == "function_name":
                                     continue
                                 assert v == func_reconstructed.to_dict()[k]
+                    elif doc_store_field == "drop_old":
+                        assert reconstructed_retriever.document_store.drop_old is False
                     else:
                         assert getattr(reconstructed_retriever.document_store, doc_store_field) == getattr(
                             document_store, doc_store_field
