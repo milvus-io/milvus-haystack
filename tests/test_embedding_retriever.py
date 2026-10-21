@@ -78,6 +78,16 @@ class TestMilvusEmbeddingTests:
         assert len(res["documents"]) == 10
         assert_docs_equal_except_score(res["documents"][0], documents[5])
 
+    def test_run_sets_score_without_mutation_warning(self, document_store: MilvusDocumentStore, recwarn):
+        document = Document(content="A scored document", embedding=l2_normalization([0.5] * 64))
+        document_store.write_documents([document])
+
+        result = MilvusEmbeddingRetriever(document_store).run(l2_normalization([0.5] * 64))
+
+        assert document.score is None
+        assert result["documents"][0].score is not None
+        assert not any("Mutating attribute 'score'" in str(warning.message) for warning in recwarn)
+
     def test_run_using_filters(self, document_store: MilvusDocumentStore):
         """Test that filters are properly applied at runtime"""
         documents = []

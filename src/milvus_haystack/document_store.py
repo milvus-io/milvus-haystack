@@ -379,7 +379,7 @@ class MilvusDocumentStore:
 
         :param documents: A list of documents.
         :param policy: Documents with the same ID count as duplicates.
-            MilvusStore only supports `DuplicatePolicy.NONE`
+            MilvusStore supports `DuplicatePolicy.NONE` and `DuplicatePolicy.OVERWRITE`.
         :return: Number of documents written.
         """
 
@@ -388,12 +388,10 @@ class MilvusDocumentStore:
             err_msg = "param 'documents' must contain a list of objects of type Document"
             raise ValueError(err_msg)
 
-        if policy not in [DuplicatePolicy.NONE]:
+        if policy not in [DuplicatePolicy.NONE, DuplicatePolicy.OVERWRITE]:
             logger.warning(
-                f"MilvusStore only supports `DuplicatePolicy.NONE`, but got {policy}. "
-                "Milvus does not currently check if entity primary keys are duplicates."
-                "You are responsible for ensuring entity primary keys are unique, "
-                "and if they aren't Milvus may contain multiple entities with duplicate primary keys."
+                f"MilvusStore only supports `DuplicatePolicy.NONE` and `DuplicatePolicy.OVERWRITE`, "
+                f"but got {policy}. Falling back to `DuplicatePolicy.NONE`."
             )
 
         # Check embeddings
@@ -478,18 +476,18 @@ class MilvusDocumentStore:
         total_count = len(insert_list)
         batch_size = 1000
         wrote_ids = []
+        write_batch = self.client.upsert if policy == DuplicatePolicy.OVERWRITE else self.client.insert
         if not self._collection_exists:
             raise MilvusException(message="Collection is not initialized")
         for i in range(0, total_count, batch_size):
             # Grab end index
             end = min(i + batch_size, total_count)
             batch_insert_list = insert_list[i:end]
-            # Insert into the collection.
             try:
-                res = self.client.insert(self.collection_name, batch_insert_list, timeout=None)
+                res = write_batch(self.collection_name, batch_insert_list, timeout=None)
                 wrote_ids.extend(res["ids"])
             except MilvusException as err:
-                logger.error("Failed to insert batch starting at entity: %s/%s", i, total_count)
+                logger.error("Failed to write batch starting at entity: %s/%s", i, total_count)
                 raise err
         return len(wrote_ids)
 
