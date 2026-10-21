@@ -2,7 +2,7 @@ import logging
 
 import pytest
 from haystack import Document
-from haystack.document_stores.types import DocumentStore
+from haystack.document_stores.types import DocumentStore, DuplicatePolicy
 from haystack.testing.document_store import CountDocumentsTest, DeleteDocumentsTest, WriteDocumentsTest
 from haystack.utils import Secret
 from pymilvus import DataType, MilvusClient
@@ -57,9 +57,6 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
 
     @pytest.mark.skip(reason="Milvus does not currently check if entity primary keys are duplicates")
     def test_write_documents_duplicate_skip(self, document_store: DocumentStore): ...
-
-    @pytest.mark.skip(reason="Milvus does not currently check if entity primary keys are duplicates")
-    def test_write_documents_duplicate_overwrite(self, document_store: DocumentStore): ...
 
     def test_to_and_from_dict(self, document_store: MilvusDocumentStore):
         document_store_dict = document_store.to_dict()
@@ -152,6 +149,25 @@ class TestPymilvusApiUsage:
         document_store.filter_documents()
 
         assert calls == []
+
+    def test_overwrite_uses_client_upsert(self, document_store: MilvusDocumentStore, monkeypatch):
+        document_store.write_documents([Document(id="same-id", content="original")])
+        calls = []
+        upsert = document_store.client.upsert
+
+        def spy(*args, **kwargs):
+            calls.append((args, kwargs))
+            return upsert(*args, **kwargs)
+
+        monkeypatch.setattr(document_store.client, "upsert", spy)
+
+        document_store.write_documents(
+            [Document(id="same-id", content="updated")],
+            policy=DuplicatePolicy.OVERWRITE,
+        )
+
+        assert len(calls) == 1
+        assert document_store.filter_documents()[0].content == "updated"
 
     def test_secret_connection_values_are_resolved_for_client_only(self, monkeypatch):
         captured_args = {}
