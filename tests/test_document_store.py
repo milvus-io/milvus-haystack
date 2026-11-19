@@ -112,6 +112,40 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
 
         assert reconstructed_document_store.count_documents() == 1
 
+    def test_meta_with_the_name_of_a_collection_field_does_not_replace_it(self, document_store: MilvusDocumentStore):
+        # Metadata such as `id` and `text` is common in datasets, for example
+        # Document(content=row["text"], meta=row).
+        documents = [
+            Document(id="chunk-1", content="first chunk", meta={"id": "source-7", "lang": "en"}),
+            Document(
+                id="chunk-2", content="second chunk", meta={"id": "source-7", "text": "a caption", "vector": [1.0]}
+            ),
+        ]
+
+        assert document_store.write_documents(documents) == 2
+
+        stored = sorted(document_store.filter_documents(), key=lambda doc: doc.id)
+        assert [(doc.id, doc.content, doc.meta) for doc in stored] == [
+            ("chunk-1", "first chunk", {"lang": "en"}),
+            ("chunk-2", "second chunk", {}),
+        ]
+        document_store.delete_documents(["chunk-1", "chunk-2"])
+        assert document_store.count_documents() == 0
+
+    def test_meta_with_the_name_of_a_collection_field_without_dynamic_fields(self):
+        document_store = MilvusDocumentStore(
+            connection_args=DEFAULT_CONNECTION_ARGS,
+            consistency_level="Strong",
+            drop_old=True,
+            enable_dynamic_field=False,
+        )
+        document = Document(id="chunk-1", content="first chunk", meta={"id": "source-7", "lang": "en"})
+
+        assert document_store.write_documents([document]) == 1
+
+        stored = document_store.filter_documents()
+        assert [(doc.id, doc.content, doc.meta) for doc in stored] == [("chunk-1", "first chunk", {"lang": "en"})]
+
 
 class TestPymilvusApiUsage:
     @pytest.fixture

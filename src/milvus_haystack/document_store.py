@@ -387,6 +387,7 @@ class MilvusDocumentStore:
         if len(documents_cp) > 0 and not isinstance(documents_cp[0], Document):
             err_msg = "param 'documents' must contain a list of objects of type Document"
             raise ValueError(err_msg)
+        documents_cp = [self._discard_reserved_meta(doc) for doc in documents_cp]
 
         if policy not in [DuplicatePolicy.NONE, DuplicatePolicy.OVERWRITE]:
             logger.warning(
@@ -1002,6 +1003,29 @@ class MilvusDocumentStore:
             return replace(document, meta=new_meta)
 
         return document
+
+    def _discard_reserved_meta(self, document: Document) -> Document:
+        """
+        Remove metadata fields that have the name of a field the store writes itself.
+
+        Metadata is written next to the primary key, text and vector fields, so a metadata field such as `id` or
+        `text` would replace the document's own ID or content.
+        """
+        reserved_fields = {self._primary_field, self._text_field, self._vector_field}
+        if self._sparse_vector_field:
+            reserved_fields.add(self._sparse_vector_field)
+        discarded_keys = [key for key in document.meta if key in reserved_fields]
+        if not discarded_keys:
+            return document
+
+        logger.warning(
+            "Document %s has metadata fields with the name of a collection field: %s. "
+            "The values of these metadata fields will be discarded.",
+            document.id,
+            discarded_keys,
+        )
+        meta = {key: value for key, value in document.meta.items() if key not in reserved_fields}
+        return replace(document, meta=meta)
 
     def _prepare_search_data(
         self,
