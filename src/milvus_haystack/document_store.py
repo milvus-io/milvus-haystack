@@ -358,15 +358,21 @@ class MilvusDocumentStore:
         else:
             expr = parse_filters(filters)
 
-        # Perform the Query.
+        # Perform the Query. A single query returns at most MAX_LIMIT_SIZE entities, so read the matches in batches.
+        res: list[dict[str, Any]] = []
         try:
-            res = self.client.query(
+            iterator = self.client.query_iterator(
                 self.collection_name,
+                batch_size=MAX_LIMIT_SIZE,
                 filter=expr,
                 output_fields=output_fields,
-                limit=MAX_LIMIT_SIZE,
                 partition_names=self.partition_names,
             )
+            try:
+                while batch := iterator.next():
+                    res.extend(batch)
+            finally:
+                iterator.close()
         except MilvusException as err:
             logger.error("Failed to query documents with filters expr: %s", expr)
             raise FilterError(err) from err

@@ -112,6 +112,16 @@ class TestDocumentStore(CountDocumentsTest, WriteDocumentsTest, DeleteDocumentsT
 
         assert reconstructed_document_store.count_documents() == 1
 
+    def test_filter_documents_returns_every_match(self, document_store: MilvusDocumentStore, monkeypatch):
+        # One Milvus query returns at most MAX_LIMIT_SIZE entities. Lower it to keep the test small.
+        monkeypatch.setattr("milvus_haystack.document_store.MAX_LIMIT_SIZE", 5)
+        documents = [Document(id=f"doc-{i}", content=f"doc {i}", meta={"even": i % 2 == 0}) for i in range(12)]
+        document_store.write_documents(documents)
+
+        assert sorted(doc.id for doc in document_store.filter_documents()) == sorted(doc.id for doc in documents)
+        even = document_store.filter_documents({"field": "meta.even", "operator": "==", "value": True})
+        assert sorted(doc.id for doc in even) == sorted(f"doc-{i}" for i in range(0, 12, 2))
+
 
 class TestPymilvusApiUsage:
     @pytest.fixture
